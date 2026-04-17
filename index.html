@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DISK SCHEDULER — Cylinder Access Simulator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --amber: #ffb300;
+    --amber-dim: #7a5500;
+    --amber-glow: #ffd54f;
+    --green: #00e676;
+    --green-dim: #1b5e20;
+    --red: #ff1744;
+    --bg: #0a0a08;
+    --bg2: #0f0f0b;
+    --bg3: #151510;
+    --panel: #111109;
+    --border: #2a2a1a;
+    --scan-line: rgba(255,179,0,0.03);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    overflow-x: hidden;
+  }
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px, transparent 3px,
+      var(--scan-line) 3px, var(--scan-line) 4px
+    );
+  }
+  /* CRT vignette */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 9998;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+  }
+
+  .orbitron { font-family: 'Orbitron', monospace; }
+  .vt323 { font-family: 'VT323', monospace; }
+
+  /* Amber glow text */
+  .glow { text-shadow: 0 0 8px var(--amber), 0 0 20px var(--amber-dim); }
+  .glow-green { text-shadow: 0 0 8px var(--green), 0 0 20px var(--green-dim); }
+  .glow-red { text-shadow: 0 0 8px var(--red); }
+
+  /* Panels */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .panel::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,179,0,0.02) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .panel-header {
+    background: linear-gradient(90deg, #1a1a0a 0%, #0f0f08 100%);
+    border-bottom: 1px solid var(--amber-dim);
+    padding: 6px 12px;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--amber-dim);
+    text-transform: uppercase;
+  }
+  .panel-header span { color: var(--amber); }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 11px;
+    border: 1px solid var(--amber-dim);
+    background: transparent;
+    color: var(--amber);
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn:hover {
+    background: rgba(255,179,0,0.1);
+    border-color: var(--amber);
+    box-shadow: 0 0 12px rgba(255,179,0,0.3), inset 0 0 8px rgba(255,179,0,0.05);
+    color: var(--amber-glow);
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn.active {
+    background: rgba(255,179,0,0.15);
+    border-color: var(--amber);
+    box-shadow: 0 0 16px rgba(255,179,0,0.4);
+    color: var(--amber-glow);
+  }
+  .btn-green {
+    border-color: var(--green-dim);
+    color: var(--green);
+  }
+  .btn-green:hover {
+    background: rgba(0,230,118,0.1);
+    border-color: var(--green);
+    box-shadow: 0 0 12px rgba(0,230,118,0.3);
+    color: var(--green);
+  }
+  .btn-green.active {
+    background: rgba(0,230,118,0.15);
+    border-color: var(--green);
+  }
+  .btn-red { border-color: #7f0000; color: var(--red); }
+  .btn-red:hover {
+    background: rgba(255,23,68,0.1);
+    border-color: var(--red);
+    box-shadow: 0 0 12px rgba(255,23,68,0.3);
+  }
+
+  /* Input */
+  input[type="text"], input[type="number"], select {
+    background: #080805;
+    border: 1px solid var(--border);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 5px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus {
+    border-color: var(--amber-dim);
+    box-shadow: 0 0 8px rgba(255,179,0,0.15);
+  }
+  select option { background: #0a0a08; }
+
+  /* Slider */
+  input[type="range"] { accent-color: var(--amber); cursor: pointer; }
+
+  /* Disk Architecture Canvas */
+  #diskCanvas { display: block; width: 100%; }
+
+  /* Chart Canvas */
+  #chartCanvas { display: block; width: 100%; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--amber-dim); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--amber); }
+
+  /* Blinking cursor */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .blink { animation: blink 1s infinite; }
+
+  /* Head movement animation */
+  @keyframes headPulse { 0%,100%{box-shadow:0 0 6px var(--green)} 50%{box-shadow:0 0 20px var(--green), 0 0 40px rgba(0,230,118,0.3)} }
+  .head-pulse { animation: headPulse 0.8s infinite; }
+
+  /* Starvation highlight */
+  @keyframes starve { 0%,100%{color:var(--red); text-shadow:0 0 6px var(--red)} 50%{color:#ff6d6d; text-shadow:0 0 12px var(--red)} }
+  .starving { animation: starve 1s infinite; }
+
+  /* Status indicator */
+  @keyframes statusPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .status-active { animation: statusPulse 1.2s infinite; }
+
+  /* Progress bar glow */
+  .progress-bar {
+    height: 4px;
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+    box-shadow: 0 0 8px var(--amber);
+    transition: width 0.3s ease;
+  }
+
+  .stat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    color: var(--amber-glow);
+    text-shadow: 0 0 10px var(--amber);
+  }
+
+  /* Info panel tabs */
+  .tab-btn { transition: all 0.2s; }
+  .tab-btn.active {
+    color: var(--amber);
+    border-bottom: 2px solid var(--amber);
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Log entry */
+  .log-entry {
+    border-left: 2px solid var(--amber-dim);
+    padding-left: 8px;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: #887733;
+    transition: all 0.3s;
+  }
+  .log-entry.highlight {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
+  /* Algo card */
+  .algo-card {
+    border: 1px solid var(--border);
+    padding: 10px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+  }
+  .algo-card:hover { border-color: var(--amber-dim); }
+  .algo-name { color: var(--amber); font-size: 12px; letter-spacing: 2px; }
+  .algo-desc { color: #665522; font-size: 11px; margin-top: 4px; line-height: 1.5; }
+  .algo-tag {
+    display: inline-block; font-size: 9px; padding: 1px 6px;
+    border: 1px solid; margin-top: 4px; margin-right: 4px;
+    letter-spacing: 1px;
+  }
+  .tag-fair { border-color: var(--green-dim); color: var(--green); }
+  .tag-fast { border-color: var(--amber-dim); color: var(--amber); }
+  .tag-starvation { border-color: #7f0000; color: var(--red); }
+  .tag-balanced { border-color: #1a5a4a; color: #00bfa5; }
+
+  /* Mobile adjustments */
+  @media (max-width: 768px) {
+    .main-grid { grid-template-columns: 1fr !important; }
+    .right-col { display: none; }
+  }
+</style>
+</head>
+<body class="min-h-screen p-2">
+
+<!-- HEADER -->
+<header class="panel mb-2 p-3 flex items-center justify-between">
+  <div class="flex items-center gap-4">
+    <div class="flex gap-1.5">
+      <div class="w-3 h-3 rounded-full bg-red-800 border border-red-600"></div>
+      <div class="w-3 h-3 rounded-full bg-yellow-800 border border-yellow-600"></div>
+      <div class="w-3 h-3 rounded-full" style="background:#1b5e20;border:1px solid #2e7d32"></div>
+    </div>
+    <div>
+      <div class="orbitron text-xs tracking-widest" style="color:var(--amber-dim)">SYSTEM/OS</div>
+      <div class="orbitron font-black tracking-widest glow" style="font-size:16px">DISK SCHEDULER</div>
+    </div>
+  </div>
+  <div class="text-right hidden sm:block">
+    <div class="vt323 text-2xl glow" id="clock">00:00:00</div>
+    <div class="text-xs" style="color:var(--amber-dim);letter-spacing:2px">CYLINDER ACCESS SIMULATOR</div>
+  </div>
+</header>
+
+<!-- MAIN LAYOUT -->
+<div class="grid gap-2" style="grid-template-columns: 260px 1fr 240px;" id="mainGrid">
+
+  <!-- LEFT: CONTROLS -->
+  <div class="flex flex-col gap-2">
+
+    <!-- Algorithm Select -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Algorithm</span></div>
+      <div class="p-3 flex flex-col gap-1.5">
+        <div id="algoButtons" class="flex flex-col gap-1">
+          <!-- filled by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Request Queue -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Request Queue</span></div>
+      <div class="p-3 flex flex-col gap-2">
+        <div class="text-xs mb-1" style="color:var(--amber-dim)">CYLINDER REQUESTS (0-199)</div>
+        <input type="text" id="queueInput" value="98,183,37,122,14,124,65,67"
+          class="w-full text-sm" placeholder="e.g. 98,183,37,122">
+        <div class="flex gap-1">
+          <input type="number" id="randomCount" value="10" min="3" max="20"
+            class="w-16 text-sm text-center">
+          <button class="btn flex-1" onclick="generateRandom()">⚄ RANDOM</button>
+        </div>
+        <div class="flex gap-1 items-center">
+          <div class="text-xs" style="color:var(--amber-dim)">HEAD POS</div>
+          <input type="number" id="headPos" value="53" min="0" max="199"
+            class="flex-1 text-sm text-center">
+        </div>
+        <!-- Queue visual chips -->
+        <div id="queueChips" class="flex flex-wrap gap-1 mt-1 min-h-8"></div>
+      </div>
+    </div>
+
+    <!-- Playback -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Playback Control</span></div>
+      <div class="p-3 flex flex-col gap-2">
+        <div class="flex gap-1">
+          <button class="btn btn-green flex-1" id="btnPlay" onclick="togglePlay()">▶ PLAY</button>
+          <button class="btn flex-1" id="btnStep" onclick="stepOnce()">⏭ STEP</button>
+        </div>
+        <button class="btn btn-red w-full" onclick="resetSim()">↺ RESET</button>
+        <div class="mt-1">
+          <div class="flex justify-between text-xs mb-1" style="color:var(--amber-dim)">
+            <span>SPEED</span>
+            <span id="speedLabel">500ms</span>
+          </div>
+          <input type="range" id="speedSlider" min="50" max="2000" step="50" value="500"
+            class="w-full" oninput="updateSpeed(this.value)">
+        </div>
+        <!-- Status -->
+        <div class="panel p-2 mt-1 text-center">
+          <div id="statusText" class="text-xs tracking-widest glow" style="color:var(--amber-dim)">STANDBY</div>
+          <div class="mt-1 bg-black rounded" style="height:4px">
+            <div id="progressBar" class="progress-bar rounded" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Direction (for SCAN/LOOK) -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Head Direction</span></div>
+      <div class="p-3 flex gap-2">
+        <button class="btn flex-1" id="dirUp" onclick="setDir('up')">↑ HIGH</button>
+        <button class="btn flex-1 active" id="dirDown" onclick="setDir('down')">↓ LOW</button>
+      </div>
+      <div class="px-3 pb-3 text-xs" style="color:var(--amber-dim)">Used by SCAN, C-SCAN, LOOK, C-LOOK</div>
+    </div>
+
+  </div><!-- /left col -->
+
+  <!-- CENTER: VISUALIZATIONS -->
+  <div class="flex flex-col gap-2">
+
+    <!-- Disk Architecture -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Disk Architecture</span>
+        <span style="color:var(--amber-dim)" class="ml-4 text-xs">PLATTERS · TRACKS · R/W HEAD</span>
+      </div>
+      <div class="p-2">
+        <canvas id="diskCanvas" height="160"></canvas>
+      </div>
+    </div>
+
+    <!-- Request Map / Chart -->
+    <div class="panel flex-1">
+      <div class="panel-header flex items-center justify-between">
+        <span>▸ <span style="color:var(--amber)">Head Movement Chart</span></span>
+        <div class="flex items-center gap-3 text-xs" style="color:var(--amber-dim)">
+          <span>■ <span style="color:var(--green)">SERVICED</span></span>
+          <span>■ <span style="color:var(--amber)">PENDING</span></span>
+          <span>■ <span style="color:var(--red)">CURRENT</span></span>
+        </div>
+      </div>
+      <div class="p-2">
+        <canvas id="chartCanvas" height="280"></canvas>
+      </div>
+    </div>
+
+    <!-- Execution Log -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Execution Log</span>
+        <button class="btn ml-4" style="padding:2px 8px;font-size:9px" onclick="clearLog()">CLR</button>
+      </div>
+      <div id="execLog" class="p-2 overflow-y-auto" style="height:100px;font-size:11px">
+        <div class="log-entry highlight">[ SYSTEM ] Disk Scheduler initialized. Select algorithm and press PLAY.</div>
+      </div>
+    </div>
+
+  </div><!-- /center col -->
+
+  <!-- RIGHT: DASHBOARD + INFO -->
+  <div class="flex flex-col gap-2 right-col">
+
+    <!-- Performance Dashboard -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Performance</span></div>
+      <div class="p-3 grid grid-cols-2 gap-3">
+        <div class="text-center">
+          <div class="text-xs mb-1" style="color:var(--amber-dim);letter-spacing:1px">TOTAL SEEK</div>
+          <div class="stat-val" id="statTotal">0</div>
+          <div class="text-xs" style="color:var(--amber-dim)">cylinders</div>
+        </div>
+        <div class="text-center">
+          <div class="text-xs mb-1" style="color:var(--amber-dim);letter-spacing:1px">AVG SEEK</div>
+          <div class="stat-val" id="statAvg">0.0</div>
+          <div class="text-xs" style="color:var(--amber-dim)">cyls/req</div>
+        </div>
+        <div class="text-center">
+          <div class="text-xs mb-1" style="color:var(--amber-dim);letter-spacing:1px">SERVICED</div>
+          <div class="stat-val" id="statServiced">0</div>
+          <div class="text-xs" style="color:var(--amber-dim)">requests</div>
+        </div>
+        <div class="text-center">
+          <div class="text-xs mb-1" style="color:var(--amber-dim);letter-spacing:1px">PENDING</div>
+          <div class="stat-val" id="statPending">0</div>
+          <div class="text-xs" style="color:var(--amber-dim)">requests</div>
+        </div>
+      </div>
+      <!-- Starvation indicator -->
+      <div class="border-t mx-3 mb-3" style="border-color:var(--border)"></div>
+      <div class="px-3 pb-3">
+        <div class="text-xs mb-2" style="color:var(--amber-dim);letter-spacing:2px">STARVATION CHECK</div>
+        <div id="starvationPanel" class="text-xs p-2" style="background:#080805;border:1px solid var(--border)">
+          <div style="color:var(--green)">● NO STARVATION DETECTED</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="panel">
+      <div class="panel-header">▸ <span>Algorithm Comparison</span></div>
+      <div class="p-2 overflow-x-auto">
+        <table class="w-full text-xs" style="border-collapse:collapse">
+          <thead>
+            <tr style="color:var(--amber-dim);border-bottom:1px solid var(--border)">
+              <th class="text-left py-1 px-1">ALG</th>
+              <th class="text-right py-1 px-1">TOTAL</th>
+              <th class="text-right py-1 px-1">AVG</th>
+            </tr>
+          </thead>
+          <tbody id="compTable">
+            <!-- filled by JS -->
+          </tbody>
+        </table>
+        <button class="btn w-full mt-2 text-xs" onclick="runAllComparison()">⚡ RUN ALL</button>
+      </div>
+    </div>
+
+    <!-- Info Tabs -->
+    <div class="panel flex-1">
+      <div class="panel-header">▸ <span>Knowledge Base</span></div>
+      <div class="flex border-b" style="border-color:var(--border)">
+        <button class="tab-btn active px-3 py-2 text-xs tracking-widest" style="color:var(--amber-dim);border-bottom-color:var(--amber)" onclick="switchTab('access')">ACCESS TIME</button>
+        <button class="tab-btn px-3 py-2 text-xs tracking-widest" style="color:var(--amber-dim)" onclick="switchTab('algos')">ALGORITHMS</button>
+      </div>
+      <div class="p-3 overflow-y-auto" style="max-height:300px">
+        <div id="tab-access" class="tab-content active">
+          <div class="text-xs leading-relaxed" style="color:#887733">
+            <div class="mb-3">
+              <div class="text-xs mb-1 tracking-widest" style="color:var(--amber)">① SEEK TIME</div>
+              <div>Time for the r/w head to move to the correct <span style="color:var(--amber)">track/cylinder</span>. Dominant cost. Range: 1–20ms. Minimized by scheduling algorithms.</div>
+            </div>
+            <div class="mb-3">
+              <div class="text-xs mb-1 tracking-widest" style="color:var(--amber)">② ROTATIONAL LATENCY</div>
+              <div>Time waiting for the disk to rotate so the correct <span style="color:var(--amber)">sector</span> is under the head. Avg = ½ rotation. ~2–8ms on modern drives.</div>
+            </div>
+            <div>
+              <div class="text-xs mb-1 tracking-widest" style="color:var(--amber)">③ DATA TRANSFER TIME</div>
+              <div>Time to actually read/write the data once positioned. Proportional to <span style="color:var(--amber)">data size</span> and rotational speed. Usually the smallest component.</div>
+            </div>
+            <div class="mt-3 p-2" style="border:1px solid var(--border);background:#05050300">
+              <div style="color:var(--amber-dim)" class="mb-1">TOTAL ACCESS TIME =</div>
+              <div style="color:var(--amber)">Seek + Rotational Latency + Transfer</div>
+            </div>
+          </div>
+        </div>
+        <div id="tab-algos" class="tab-content">
+          <div id="algoCards"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /right col -->
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+const DISK_MAX = 199;
+const ALGORITHMS = ['FCFS','SSTF','SCAN','C-SCAN','LOOK','C-LOOK'];
+const ALGO_INFO = {
+  'FCFS': {
+    desc: 'Service requests in exact arrival order. Simple and fair — no starvation — but head movement is unpredictable and often excessive.',
+    tags: ['fair','slow'],
+    tradeoff: 'Fair but inefficient. Can result in large head movements across the disk.'
+  },
+  'SSTF': {
+    desc: 'Always service the closest pending request. Minimizes individual seek times but distant requests can starve indefinitely.',
+    tags: ['fast','starvation'],
+    tradeoff: 'Good throughput, but outer-track requests may never be served if inner requests keep arriving.'
+  },
+  'SCAN': {
+    desc: 'Head sweeps to disk end, then reverses. Like an elevator. Moderate seek time, no starvation, but end cylinders are visited less.',
+    tags: ['balanced','fair'],
+    tradeoff: 'Good average performance. Slight bias against edge cylinders.'
+  },
+  'C-SCAN': {
+    desc: 'Head moves in one direction only; jumps back to start (cylinder 0) without servicing. Provides more uniform wait times.',
+    tags: ['balanced','fair'],
+    tradeoff: 'More uniform wait time than SCAN. Return sweep wastes time but ensures fairness.'
+  },
+  'LOOK': {
+    desc: 'Like SCAN but reverses at last actual request instead of disk boundary. Avoids unnecessary travel to disk edges.',
+    tags: ['fast','balanced'],
+    tradeoff: 'More efficient than SCAN. Never travels to the disk boundary unless needed.'
+  },
+  'C-LOOK': {
+    desc: 'Like C-SCAN but jumps back to lowest pending request, not cylinder 0. Best overall efficiency for high-load scenarios.',
+    tags: ['fast','balanced'],
+    tradeoff: 'Most efficient circular variant. Combines LOOK efficiency with C-SCAN uniformity.'
+  }
+};
+
+let state = {
+  algo: 'FCFS',
+  requests: [98,183,37,122,14,124,65,67],
+  headStart: 53,
+  direction: 'down', // for SCAN/LOOK/C-SCAN/C-LOOK
+  sequence: [],       // computed full sequence
+  step: 0,
+  playing: false,
+  playTimer: null,
+  speed: 500,
+  totalSeek: 0,
+  serviced: [],
+  pending: [],
+  servicedCounts: {}, // track how many times each was waited
+  compResults: {}
+};
+
+// ═══════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toTimeString().slice(0,8);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ═══════════════════════════════════════════════
+// ALGORITHM BUTTONS
+// ═══════════════════════════════════════════════
+function buildAlgoButtons() {
+  const container = document.getElementById('algoButtons');
+  container.innerHTML = '';
+  ALGORITHMS.forEach(a => {
+    const btn = document.createElement('button');
+    btn.className = 'btn text-left ' + (state.algo === a ? 'active' : '');
+    btn.textContent = a + ' — ' + getAlgoShortDesc(a);
+    btn.onclick = () => selectAlgo(a);
+    btn.id = 'algobtn_' + a;
+    container.appendChild(btn);
+  });
+}
+function getAlgoShortDesc(a) {
+  const map = {
+    'FCFS':'First Come First Served',
+    'SSTF':'Shortest Seek First',
+    'SCAN':'Elevator',
+    'C-SCAN':'Circular Scan',
+    'LOOK':'Look Ahead',
+    'C-LOOK':'Circular Look'
+  };
+  return map[a];
+}
+function selectAlgo(a) {
+  state.algo = a;
+  buildAlgoButtons();
+  resetSim();
+  log(`[ ALGO ] Selected: ${a} — ${ALGO_INFO[a].tradeoff}`);
+}
+
+// ═══════════════════════════════════════════════
+// ALGORITHM LOGIC
+// ═══════════════════════════════════════════════
+function computeSequence(algo, requests, head, dir) {
+  const reqs = [...requests];
+  const seq = [head]; // positions visited
+  let remaining = [...reqs];
+  let pos = head;
+  let direction = dir; // 'up' or 'down'
+
+  if (algo === 'FCFS') {
+    reqs.forEach(r => seq.push(r));
+    return seq;
+  }
+
+  if (algo === 'SSTF') {
+    while (remaining.length > 0) {
+      let closest = remaining.reduce((prev, cur) =>
+        Math.abs(cur - pos) < Math.abs(prev - pos) ? cur : prev
+      );
+      seq.push(closest);
+      pos = closest;
+      remaining = remaining.filter(r => r !== closest || (remaining.splice(remaining.indexOf(closest),1) && false));
+      // safe removal of one element
+      const idx = remaining.indexOf(closest);
+      // already removed above? redo:
+    }
+    // redo SSTF cleanly:
+    const seq2 = [head];
+    let rem2 = [...reqs];
+    let p2 = head;
+    while(rem2.length > 0){
+      let minDist = Infinity, minIdx = 0;
+      rem2.forEach((r,i) => { const d = Math.abs(r-p2); if(d<minDist){minDist=d;minIdx=i;} });
+      seq2.push(rem2[minIdx]);
+      p2 = rem2[minIdx];
+      rem2.splice(minIdx,1);
+    }
+    return seq2;
+  }
+
+  if (algo === 'SCAN') {
+    const lower = reqs.filter(r => r <= pos).sort((a,b)=>b-a);
+    const upper = reqs.filter(r => r > pos).sort((a,b)=>a-b);
+    if (direction === 'up') {
+      upper.forEach(r => seq.push(r));
+      if(upper.length) seq.push(DISK_MAX);
+      lower.forEach(r => seq.push(r));
+    } else {
+      lower.forEach(r => seq.push(r));
+      if(lower.length) seq.push(0);
+      upper.forEach(r => seq.push(r));
+    }
+    return seq;
+  }
+
+  if (algo === 'C-SCAN') {
+    const upper = reqs.filter(r => r >= pos).sort((a,b)=>a-b);
+    const lower = reqs.filter(r => r < pos).sort((a,b)=>a-b);
+    upper.forEach(r => seq.push(r));
+    seq.push(DISK_MAX);
+    seq.push(0); // jump (no service)
+    lower.forEach(r => seq.push(r));
+    return seq;
+  }
+
+  if (algo === 'LOOK') {
+    const lower = reqs.filter(r => r <= pos).sort((a,b)=>b-a);
+    const upper = reqs.filter(r => r > pos).sort((a,b)=>a-b);
+    if (direction === 'up') {
+      upper.forEach(r => seq.push(r));
+      lower.forEach(r => seq.push(r));
+    } else {
+      lower.forEach(r => seq.push(r));
+      upper.forEach(r => seq.push(r));
+    }
+    return seq;
+  }
+
+  if (algo === 'C-LOOK') {
+    const upper = reqs.filter(r => r >= pos).sort((a,b)=>a-b);
+    const lower = reqs.filter(r => r < pos).sort((a,b)=>a-b);
+    upper.forEach(r => seq.push(r));
+    lower.forEach(r => seq.push(r));
+    return seq;
+  }
+
+  return seq;
+}
+
+// ═══════════════════════════════════════════════
+// QUEUE MANAGEMENT
+// ═══════════════════════════════════════════════
+function parseQueue() {
+  const raw = document.getElementById('queueInput').value;
+  const vals = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0 && n <= DISK_MAX);
+  return [...new Set(vals)]; // deduplicate
+}
+function generateRandom() {
+  const count = parseInt(document.getElementById('randomCount').value) || 10;
+  const vals = new Set();
+  while(vals.size < Math.min(count, 50)) {
+    vals.add(Math.floor(Math.random() * 200));
+  }
+  document.getElementById('queueInput').value = [...vals].join(',');
+  resetSim();
+}
+function updateQueueChips() {
+  const chips = document.getElementById('queueChips');
+  chips.innerHTML = '';
+  state.requests.forEach((r, i) => {
+    const chip = document.createElement('div');
+    const isServiced = state.serviced.includes(r) || (state.step > 0 && state.sequence.slice(1, state.step+1).includes(r));
+    chip.className = 'text-xs px-2 py-0.5 border';
+    chip.style.cssText = isServiced
+      ? 'border-color:#1b5e20;color:#00e676;background:#051a08'
+      : 'border-color:var(--amber-dim);color:var(--amber)';
+    chip.textContent = r;
+    // starvation check: if pending too long
+    chips.appendChild(chip);
+  });
+}
+
+// ═══════════════════════════════════════════════
+// SIMULATION CONTROL
+// ═══════════════════════════════════════════════
+function initSim() {
+  state.requests = parseQueue();
+  state.headStart = parseInt(document.getElementById('headPos').value) || 53;
+  state.sequence = computeSequence(state.algo, state.requests, state.headStart, state.direction);
+  state.step = 0;
+  state.totalSeek = 0;
+  state.serviced = [];
+  state.pending = [...state.requests];
+  updateStats();
+  updateQueueChips();
+  drawChart();
+  drawDisk();
+  setStatus('READY');
+}
+
+function resetSim() {
+  if(state.playing) togglePlay();
+  initSim();
+  log(`[ RESET ] Algorithm: ${state.algo} | Head: ${state.headStart} | Requests: [${state.requests.join(',')}]`);
+}
+
+function stepOnce() {
+  if(state.step === 0 && state.sequence.length <= 1) {
+    initSim();
+  }
+  if(state.step >= state.sequence.length - 1) {
+    setStatus('COMPLETE');
+    if(state.playing) togglePlay();
+    log(`[ DONE ] Total seek: ${state.totalSeek} | Avg: ${(state.totalSeek/state.requests.length).toFixed(1)}`);
+    return false;
+  }
+  state.step++;
+  const cur = state.sequence[state.step];
+  const prev = state.sequence[state.step-1];
+  const dist = Math.abs(cur - prev);
+
+  // C-SCAN / C-LOOK: detect jump (no service)
+  const isJump = (state.algo === 'C-SCAN' && cur === 0 && prev === DISK_MAX) ||
+                 (state.algo === 'C-LOOK' && state.step > 1 && cur < prev && !state.serviced.includes(cur) && state.requests.includes(cur));
+
+  if(!isJump || cur !== 0) {
+    // Only count seek if it's a real service (not the "jump to 0" in C-SCAN)
+    const cScanJump = state.algo === 'C-SCAN' && prev === DISK_MAX && cur === 0;
+    if(!cScanJump) state.totalSeek += dist;
+    if(state.requests.includes(cur) && !state.serviced.includes(cur)) {
+      state.serviced.push(cur);
+      state.pending = state.requests.filter(r => !state.serviced.includes(r));
+    }
+  }
+
+  // Edge visits (SCAN goes to 0/DISK_MAX) — don't count as serviced requests
+  setStatus(`HEAD → ${cur} | Δ${dist} cylinders`);
+  log(`[ STEP ${state.step} ] Head: ${prev} → ${cur} | Δ = ${dist} | Total = ${state.totalSeek}`);
+
+  updateStats();
+  updateQueueChips();
+  drawChart();
+  drawDisk();
+  checkStarvation();
+
+  const progress = (state.step / (state.sequence.length - 1)) * 100;
+  document.getElementById('progressBar').style.width = progress + '%';
+
+  return true;
+}
+
+function togglePlay() {
+  state.playing = !state.playing;
+  const btn = document.getElementById('btnPlay');
+  if(state.playing) {
+    btn.textContent = '⏸ PAUSE';
+    btn.classList.add('active');
+    setStatus('RUNNING');
+    if(state.step === 0) initSim();
+    playLoop();
+  } else {
+    btn.textContent = '▶ PLAY';
+    btn.classList.remove('active');
+    if(state.playTimer) clearTimeout(state.playTimer);
+    setStatus('PAUSED');
+  }
+}
+
+function playLoop() {
+  if(!state.playing) return;
+  const cont = stepOnce();
+  if(cont) {
+    state.playTimer = setTimeout(playLoop, state.speed);
+  } else {
+    state.playing = false;
+    document.getElementById('btnPlay').textContent = '▶ PLAY';
+    document.getElementById('btnPlay').classList.remove('active');
+  }
+}
+
+function updateSpeed(val) {
+  state.speed = parseInt(val);
+  document.getElementById('speedLabel').textContent = val + 'ms';
+}
+
+function setDir(d) {
+  state.direction = d;
+  document.getElementById('dirUp').classList.toggle('active', d === 'up');
+  document.getElementById('dirDown').classList.toggle('active', d === 'down');
+}
+
+// ═══════════════════════════════════════════════
+// STATISTICS
+// ═══════════════════════════════════════════════
+function updateStats() {
+  const serviced = state.serviced.length;
+  const pending = state.requests.length - serviced;
+  document.getElementById('statTotal').textContent = state.totalSeek;
+  document.getElementById('statAvg').textContent = serviced > 0
+    ? (state.totalSeek / serviced).toFixed(1) : '0.0';
+  document.getElementById('statServiced').textContent = serviced;
+  document.getElementById('statPending').textContent = pending;
+}
+
+function checkStarvation() {
+  const panel = document.getElementById('starvationPanel');
+  const notYetServiced = state.requests.filter(r => !state.serviced.includes(r));
+  if(notYetServiced.length === 0) {
+    panel.innerHTML = '<div style="color:var(--green)">● ALL REQUESTS SERVICED</div>';
+    return;
+  }
+  if(state.algo === 'SSTF' && state.step >= 3) {
+    // Check if any request hasn't moved in queue position
+    const farthest = notYetServiced.reduce((a,b) =>
+      Math.abs(b - state.sequence[state.step]) > Math.abs(a - state.sequence[state.step]) ? b : a, notYetServiced[0]);
+    const dist = Math.abs(farthest - state.sequence[state.step]);
+    if(dist > 80 && notYetServiced.length > 0) {
+      panel.innerHTML = `<div class="starving">⚠ STARVATION RISK: Cylinder ${farthest} (${dist} away)</div>`;
+      return;
+    }
+  }
+  panel.innerHTML = `<div style="color:var(--amber-dim)">● ${notYetServiced.length} PENDING: [${notYetServiced.slice(0,4).join(',')}${notYetServiced.length>4?'...':''}]</div>`;
+}
+
+// ═══════════════════════════════════════════════
+// COMPARISON
+// ═══════════════════════════════════════════════
+function runAllComparison() {
+  const reqs = parseQueue();
+  const head = parseInt(document.getElementById('headPos').value) || 53;
+  const results = {};
+  ALGORITHMS.forEach(a => {
+    const seq = computeSequence(a, reqs, head, state.direction);
+    let total = 0;
+    for(let i=1; i<seq.length; i++) {
+      if(a === 'C-SCAN' && seq[i] === 0 && seq[i-1] === DISK_MAX) continue;
+      total += Math.abs(seq[i] - seq[i-1]);
+    }
+    results[a] = total;
+  });
+  state.compResults = results;
+  renderCompTable(results);
+  log('[ COMPARE ] Ran all algorithms. See comparison table.');
+}
+
+function renderCompTable(results) {
+  const tbody = document.getElementById('compTable');
+  const reqs = parseQueue();
+  tbody.innerHTML = '';
+  const sorted = Object.entries(results).sort((a,b) => a[1]-b[1]);
+  sorted.forEach(([a, total]) => {
+    const avg = reqs.length ? (total/reqs.length).toFixed(1) : '0';
+    const isBest = a === sorted[0][0];
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--border)';
+    tr.innerHTML = `
+      <td class="py-1.5 px-1 ${isBest?'glow-green':''}" style="color:${isBest?'var(--green)':'var(--amber-dim)'}">${a}</td>
+      <td class="py-1.5 px-1 text-right" style="color:${isBest?'var(--green)':'var(--amber)'}">${total}</td>
+      <td class="py-1.5 px-1 text-right" style="color:${isBest?'var(--green)':'#665522'}">${avg}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ═══════════════════════════════════════════════
+// CHART DRAWING
+// ═══════════════════════════════════════════════
+function drawChart() {
+  const canvas = document.getElementById('chartCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth;
+  const H = canvas.height;
+  canvas.width = W;
+
+  // Background
+  ctx.fillStyle = '#050503';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,179,0,0.05)';
+  ctx.lineWidth = 1;
+  for(let i=0; i<=10; i++) {
+    const y = 20 + (H-40) * i / 10;
+    ctx.beginPath(); ctx.moveTo(40,y); ctx.lineTo(W-10,y); ctx.stroke();
+  }
+
+  // Y axis (cylinders 0-199)
+  const PAD_L = 46, PAD_R = 12, PAD_T = 14, PAD_B = 28;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+
+  // Y axis labels
+  ctx.fillStyle = 'rgba(255,179,0,0.4)';
+  ctx.font = '9px Share Tech Mono';
+  ctx.textAlign = 'right';
+  for(let v=0; v<=200; v+=50) {
+    const y = PAD_T + chartH - (v/DISK_MAX)*chartH;
+    ctx.fillText(v, PAD_L-5, y+3);
+    ctx.strokeStyle = 'rgba(255,179,0,0.06)';
+    ctx.beginPath(); ctx.moveTo(PAD_L,y); ctx.lineTo(W-PAD_R,y); ctx.stroke();
+  }
+
+  const seq = state.sequence;
+  if(seq.length < 2) {
+    // Draw pending requests as dots
+    ctx.fillStyle = 'rgba(255,179,0,0.3)';
+    state.requests.forEach(r => {
+      const y = PAD_T + chartH - (r/DISK_MAX)*chartH;
+      for(let x=PAD_L; x<W-PAD_R; x+=20) {
+        ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI*2); ctx.fill();
+      }
+    });
+    return;
+  }
+
+  const stepCount = seq.length - 1;
+  const xStep = stepCount > 0 ? chartW / stepCount : chartW;
+
+  // Draw path up to current step
+  const isCscan = state.algo === 'C-SCAN';
+
+  // Full path (faded)
+  ctx.strokeStyle = 'rgba(255,179,0,0.1)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();
+  seq.forEach((v,i) => {
+    const x = PAD_L + i * xStep;
+    const y = PAD_T + chartH - (v/DISK_MAX)*chartH;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Serviced path
+  if(state.step > 0) {
+    const grad = ctx.createLinearGradient(PAD_L, 0, PAD_L + state.step * xStep, 0);
+    grad.addColorStop(0, 'rgba(0,230,118,0.6)');
+    grad.addColorStop(1, 'rgba(255,179,0,0.9)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for(let i=0; i<=state.step; i++) {
+      const x = PAD_L + i * xStep;
+      const y = PAD_T + chartH - (seq[i]/DISK_MAX)*chartH;
+      if(i===0) ctx.moveTo(x,y); else {
+        // C-SCAN jump: dashed
+        if(isCscan && seq[i]===0 && seq[i-1]===DISK_MAX) {
+          ctx.stroke();
+          ctx.setLineDash([3,5]);
+          ctx.strokeStyle = 'rgba(255,23,68,0.4)';
+          ctx.beginPath();
+          ctx.moveTo(PAD_L+(i-1)*xStep, PAD_T + chartH - (seq[i-1]/DISK_MAX)*chartH);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.strokeStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(x,y);
+        } else {
+          ctx.lineTo(x,y);
+        }
+      }
+    }
+    ctx.stroke();
+
+    // Request dots
+    seq.forEach((v,i) => {
+      if(i === 0) return;
+      const x = PAD_L + i * xStep;
+      const y = PAD_T + chartH - (v/DISK_MAX)*chartH;
+      const isReq = state.requests.includes(v);
+      const isServiced = i <= state.step;
+      if(!isReq && v !== DISK_MAX && v !== 0) return;
+
+      ctx.beginPath();
+      ctx.arc(x, y, isReq ? 5 : 3, 0, Math.PI*2);
+      if(i === state.step) {
+        ctx.fillStyle = '#ff1744';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,23,68,0.4)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      } else if(isServiced && isReq) {
+        ctx.fillStyle = '#00e676';
+        ctx.fill();
+      } else {
+        ctx.fillStyle = 'rgba(255,179,0,0.3)';
+        ctx.fill();
+      }
+    });
+
+    // Cylinder label at current head
+    const cx = PAD_L + state.step * xStep;
+    const cy = PAD_T + chartH - (seq[state.step]/DISK_MAX)*chartH;
+    ctx.fillStyle = '#ff1744';
+    ctx.font = 'bold 10px Share Tech Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText(seq[state.step], cx, cy - 10);
+  }
+
+  // X-axis label
+  ctx.fillStyle = 'rgba(255,179,0,0.3)';
+  ctx.font = '9px Share Tech Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText('STEP →', PAD_L + chartW/2, H - 4);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(255,179,0,0.4)';
+  ctx.fillText('CYL', 2, PAD_T + chartH/2);
+}
+
+// ═══════════════════════════════════════════════
+// DISK DIAGRAM
+// ═══════════════════════════════════════════════
+function drawDisk() {
+  const canvas = document.getElementById('diskCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth;
+  const H = canvas.height;
+  canvas.width = W;
+
+  ctx.fillStyle = '#050503';
+  ctx.fillRect(0,0,W,H);
+
+  const cx = W * 0.38, cy = H * 0.5;
+  const maxR = Math.min(cx, cy) * 0.88;
+
+  // Draw platters (concentric rings)
+  const numTracks = 8;
+  for(let i = numTracks; i >= 1; i--) {
+    const r = (i / numTracks) * maxR;
+    const alpha = 0.1 + (i/numTracks)*0.15;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(255,179,0,${alpha})`;
+    ctx.lineWidth = i === numTracks ? 2 : 1;
+    ctx.stroke();
+
+    // Track fill gradient
+    if(i < numTracks) {
+      const grad = ctx.createRadialGradient(cx,cy,r*0.9,cx,cy,r);
+      grad.addColorStop(0, 'transparent');
+      grad.addColorStop(1, `rgba(255,179,0,${0.02})`);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+  }
+
+  // Highlight current cylinder
+  if(state.sequence.length > 0 && state.step < state.sequence.length) {
+    const headCyl = state.sequence[state.step];
+    const cylR = ((headCyl / DISK_MAX)) * maxR;
+    if(cylR > 2) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, cylR, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(255,23,68,0.7)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Glow
+      ctx.beginPath();
+      ctx.arc(cx, cy, cylR, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(255,23,68,0.2)';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+    }
+  }
+
+  // Center hub
+  const hubGrad = ctx.createRadialGradient(cx,cy,0,cx,cy,12);
+  hubGrad.addColorStop(0, '#3a3020');
+  hubGrad.addColorStop(1, '#1a1508');
+  ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI*2);
+  ctx.fillStyle = hubGrad; ctx.fill();
+  ctx.strokeStyle = '#665522'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Sector lines (subtle)
+  for(let s=0; s<12; s++) {
+    const angle = (s/12)*Math.PI*2 - Math.PI/2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle)*14, cy + Math.sin(angle)*14);
+    ctx.lineTo(cx + Math.cos(angle)*maxR, cy + Math.sin(angle)*maxR);
+    ctx.strokeStyle = 'rgba(255,179,0,0.04)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Actuator arm
+  const headCyl = state.step < state.sequence.length ? state.sequence[state.step] : state.headStart;
+  const headR = (headCyl / DISK_MAX) * maxR;
+  const armAngle = -Math.PI * 0.25;
+  const armLength = headR + 28;
+  const pivotX = cx + maxR * 0.7;
+  const pivotY = cy - maxR * 0.6;
+
+  // Arm pivot point
+  ctx.beginPath();
+  ctx.arc(pivotX, pivotY, 5, 0, Math.PI*2);
+  ctx.fillStyle = '#554420'; ctx.fill();
+  ctx.strokeStyle = 'var(--amber-dim)'; ctx.lineWidth = 1; ctx.stroke();
+
+  // Compute arm endpoint at headR
+  const targetX = cx + Math.cos(armAngle) * headR;
+  const targetY = cy + Math.sin(armAngle) * headR;
+  const dx = targetX - pivotX, dy = targetY - pivotY;
+  const armAngleActual = Math.atan2(dy, dx);
+
+  // Draw arm
+  const gradient = ctx.createLinearGradient(pivotX, pivotY, targetX, targetY);
+  gradient.addColorStop(0, '#3a3020');
+  gradient.addColorStop(1, '#665522');
+  ctx.beginPath();
+  ctx.moveTo(pivotX, pivotY);
+  ctx.lineTo(targetX, targetY);
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // R/W head (the actual read head)
+  ctx.beginPath();
+  ctx.arc(targetX, targetY, 5, 0, Math.PI*2);
+  ctx.fillStyle = '#00e676';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,230,118,0.5)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // Glow
+  ctx.beginPath();
+  ctx.arc(targetX, targetY, 9, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(0,230,118,0.15)';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // RIGHT SIDE: cylinder ruler
+  const rulerX = W * 0.78;
+  const rulerTop = H * 0.08;
+  const rulerBot = H * 0.92;
+  const rulerH = rulerBot - rulerTop;
+
+  ctx.strokeStyle = 'rgba(255,179,0,0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(rulerX, rulerTop); ctx.lineTo(rulerX, rulerBot); ctx.stroke();
+
+  // Tick marks
+  for(let c=0; c<=DISK_MAX; c+=25) {
+    const y = rulerTop + (c/DISK_MAX) * rulerH;
+    ctx.beginPath(); ctx.moveTo(rulerX-4, y); ctx.lineTo(rulerX+4, y); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,179,0,0.4)';
+    ctx.font = '9px Share Tech Mono';
+    ctx.textAlign = 'right';
+    ctx.fillText(c, rulerX-7, y+3);
+  }
+
+  // Head position indicator on ruler
+  const headY = rulerTop + (headCyl/DISK_MAX)*rulerH;
+  ctx.fillStyle = '#ff1744';
+  ctx.beginPath();
+  ctx.moveTo(rulerX+2, headY);
+  ctx.lineTo(rulerX+14, headY-5);
+  ctx.lineTo(rulerX+14, headY+5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ff1744';
+  ctx.font = 'bold 10px Share Tech Mono';
+  ctx.textAlign = 'left';
+  ctx.fillText(headCyl, rulerX+16, headY+4);
+
+  // Pending requests on ruler
+  state.requests.forEach(r => {
+    const y = rulerTop + (r/DISK_MAX)*rulerH;
+    const isServiced = state.serviced.includes(r);
+    ctx.beginPath();
+    ctx.arc(rulerX, y, 3, 0, Math.PI*2);
+    ctx.fillStyle = isServiced ? 'rgba(0,230,118,0.6)' : 'rgba(255,179,0,0.5)';
+    ctx.fill();
+  });
+
+  // Labels
+  ctx.fillStyle = 'rgba(255,179,0,0.3)';
+  ctx.font = '9px Share Tech Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText('CYLINDER', rulerX, rulerTop - 4);
+}
+
+// ═══════════════════════════════════════════════
+// INFO TABS
+// ═══════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(t => {
+    t.classList.remove('active');
+    t.style.borderBottom = '';
+    t.style.color = 'var(--amber-dim)';
+  });
+  document.getElementById('tab-' + tab).classList.add('active');
+  event.target.classList.add('active');
+  event.target.style.color = 'var(--amber)';
+  event.target.style.borderBottom = '2px solid var(--amber)';
+}
+
+function buildAlgoCards() {
+  const container = document.getElementById('algoCards');
+  ALGORITHMS.forEach(a => {
+    const info = ALGO_INFO[a];
+    const tags = info.tags.map(t => {
+      const cls = t === 'fair' ? 'tag-fair' : t === 'fast' ? 'tag-fast' : t === 'starvation' ? 'tag-starvation' : 'tag-balanced';
+      return `<span class="algo-tag ${cls}">${t.toUpperCase()}</span>`;
+    }).join('');
+    container.innerHTML += `
+      <div class="algo-card">
+        <div class="algo-name tracking-widest">${a}</div>
+        <div class="algo-desc">${info.desc}</div>
+        <div class="mt-2">${tags}</div>
+      </div>
+    `;
+  });
+}
+
+// ═══════════════════════════════════════════════
+// LOG
+// ═══════════════════════════════════════════════
+function log(msg) {
+  const container = document.getElementById('execLog');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry highlight';
+  entry.textContent = msg;
+  container.appendChild(entry);
+  container.scrollTop = container.scrollHeight;
+  setTimeout(() => entry.classList.remove('highlight'), 2000);
+}
+function clearLog() {
+  document.getElementById('execLog').innerHTML = '';
+}
+
+// ═══════════════════════════════════════════════
+// STATUS
+// ═══════════════════════════════════════════════
+function setStatus(text) {
+  const el = document.getElementById('statusText');
+  el.textContent = text;
+  el.className = text === 'RUNNING' ? 'text-xs tracking-widest glow status-active' : 'text-xs tracking-widest glow';
+  el.style.color = text === 'COMPLETE' ? 'var(--green)' : text === 'RUNNING' ? 'var(--amber)' : 'var(--amber-dim)';
+}
+
+// ═══════════════════════════════════════════════
+// RESIZE HANDLER
+// ═══════════════════════════════════════════════
+function onResize() {
+  drawChart();
+  drawDisk();
+}
+window.addEventListener('resize', onResize);
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+buildAlgoButtons();
+buildAlgoCards();
+initSim();
+runAllComparison();
+log('[ SYSTEM ] Disk Scheduler ready. Default: FCFS | Head: 53 | 8 requests loaded.');
+
+// Animate disk even at rest
+function idleAnimate() {
+  if(!state.playing) drawDisk();
+  // subtle rotation effect via time
+}
+
+// Redraw on input changes
+document.getElementById('queueInput').addEventListener('change', () => { resetSim(); runAllComparison(); });
+document.getElementById('headPos').addEventListener('change', () => { resetSim(); runAllComparison(); });
+</script>
+</body>
+</html>
