@@ -138,7 +138,32 @@
 
   /* Floating math label */
   @keyframes floatUp { 0%{opacity:0;transform:translateY(0)} 20%{opacity:1} 80%{opacity:1} 100%{opacity:0;transform:translateY(-28px)} }
-  .float-math { position:absolute; pointer-events:none; font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--cyan-glow); text-shadow:0 0 8px var(--cyan); animation:floatUp 1.6s ease-out forwards; white-space:nowrap; z-index:100; }
+  .float-math { position:absolute; pointer-events:none; font-family:'Share Tech Mono',monospace; font-size:12px; font-weight:bold; color:var(--cyan-glow); text-shadow:0 0 8px var(--cyan); animation:floatUp 2.1s ease-out forwards; white-space:nowrap; z-index:100; }
+
+  /* ── RECORDING / PRESENTATION MODE — Video legibility enhancements ── */
+  body.presentation .narrator-panel {
+    background: rgba(0,0,0,0.82);
+    border-left-width: 4px;
+    box-shadow: 0 0 24px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,0,0,0.6);
+  }
+  body.presentation .narrator-rule {
+    font-size: 16px;   /* +33% from 12px */
+    line-height: 1.5;
+  }
+  body.presentation .narrator-body {
+    font-size: 15px;   /* +36% from 11px */
+    line-height: 1.75;
+  }
+  body.presentation .narrator-title {
+    font-size: 12px;   /* +33% from 9px */
+    letter-spacing: 4px;
+  }
+  body.presentation .stat-val {
+    font-size: 24px;   /* +41% from 17px */
+  }
+  body.presentation .stat-val-sm {
+    font-size: 16px;   /* +33% from 12px */
+  }
 
   /* Starvation flash overlay */
   @keyframes starveFlash { 0%,100%{opacity:0} 50%{opacity:1} }
@@ -961,41 +986,60 @@ function getDecisionInfo() {
   switch (algo) {
     case 'FCFS': {
       const queuePos = state.requests.indexOf(cur) + 1;
-      narration = 'Step ' + step + ': Cylinder ' + cur + ' is position #' + queuePos + ' in the arrival queue. '
-        + 'FCFS makes zero distance optimization — distance of ' + dist + ' cylinders is irrelevant. '
-        + (distEntries.filter(d => !d.chosen && d.dist < dist).length > 0
-          ? 'Closer requests (' + distEntries.filter(d => !d.chosen && d.dist < dist).map(d => d.cyl).join(', ') + ') exist but are ignored.'
-          : 'This happens to be close.');
+      const closerOnes = distEntries.filter(d => !d.chosen && d.dist < dist).map(d => d.cyl);
+      narration = 'FCFS moving to cylinder ' + cur + ' — queue position #' + queuePos + ', distance ' + dist + ' cylinders. '
+        + 'This algorithm makes zero distance optimization: requests are served in strict arrival order. '
+        + (closerOnes.length > 0
+          ? 'Closer cylinders [' + closerOnes.join(', ') + '] exist but are skipped — fairness over efficiency. '
+          : 'This step happens to be near the head. ')
+        + 'NOTE: After seek, the drive still waits for Rotational Latency (~4ms at 7200 RPM) before transfer begins.';
       break;
     }
     case 'SSTF': {
       const sorted = [...distEntries].sort((a,b) => a.dist - b.dist);
       const secondBest = sorted.find(d => !d.chosen);
-      narration = 'Step ' + step + ': SSTF selects cylinder ' + cur + ' (distance=' + dist + ') — the nearest unserviced request. '
-        + (secondBest ? 'Next closest is cylinder ' + secondBest.cyl + ' (distance=' + secondBest.dist + '). '
-          + (secondBest.dist > dist * 2 ? 'The gap suggests cylinder ' + secondBest.cyl + ' may be skipped repeatedly if closer requests keep arriving.' : '') : '')
-        + (pendingNow.some(r => Math.abs(r - prev) > 80) ? ' WARNING: Far requests may starve.' : '');
+      const farPending = pendingNow.filter(r => Math.abs(r - prev) > 80);
+      narration = 'SSTF moving to cylinder ' + cur + ' (Distance ' + dist + '). This minimizes Seek Time locally — always choosing the nearest unserviced request to reduce head travel. '
+        + (secondBest ? 'Next closest: cylinder ' + secondBest.cyl + ' at distance ' + secondBest.dist + '. ' : '')
+        + (farPending.length > 0
+          ? 'WARNING: Cylinder ' + farPending.map(r => r).join(', ') + ' is far away — this is a classic Starvation scenario. If nearby requests keep arriving, distant cylinders may never be served. '
+          : 'No immediate starvation risk. ')
+        + 'After seek: Rotational Latency adds ~4ms before the sector rotates under the head.';
       break;
     }
     case 'SCAN':
     case 'LOOK': {
-      const dirWord = state.direction === 'up' ? 'upward' : 'downward';
+      const dirWord = state.direction === 'up' ? 'upward (increasing cylinders)' : 'downward (decreasing cylinders)';
+      const variant = algo === 'LOOK' ? 'LOOK' : 'SCAN';
       const inDir = pendingNow.filter(r => state.direction === 'up' ? r > prev : r < prev);
       const againstDir = pendingNow.filter(r => state.direction === 'up' ? r < prev : r > prev);
-      narration = 'Step ' + step + ': Sweeping ' + dirWord + ', serving cylinder ' + cur + ' (distance=' + dist + '). '
-        + inDir.length + ' more request(s) in this direction. '
-        + (againstDir.length ? againstDir.length + ' request(s) (' + againstDir.join(',') + ') will be served on the return sweep.' : 'Last request in this direction — head will reverse next.');
+      narration = variant + ' sweeping ' + dirWord + ' to cylinder ' + cur + ' (Distance ' + dist + '). '
+        + (variant === 'LOOK'
+          ? 'LOOK optimizes SCAN by reversing at the last pending request instead of the disk boundary — no wasted travel to cylinder 0 or 199. '
+          : 'SCAN (Elevator Algorithm) sweeps to the physical disk boundary before reversing. ')
+        + inDir.length + ' more request(s) remain in this sweep direction. '
+        + (againstDir.length
+          ? againstDir.length + ' request(s) [' + againstDir.join(', ') + '] queued for the return sweep — bounded wait, no starvation. '
+          : 'Last request in this direction — head reverses after this. ')
+        + 'Remember: Total Access Time = Seek Time + Rotational Latency + Transfer Time. This algorithm targets the seek component.';
       break;
     }
     case 'C-SCAN':
     case 'C-LOOK': {
+      const variant = algo === 'C-LOOK' ? 'C-LOOK' : 'C-SCAN';
       const remaining = pendingNow.filter(r => r !== cur);
-      narration = 'Step ' + step + ': C-' + (algo === 'C-SCAN' ? 'SCAN' : 'LOOK') + ' sweeping high, serving cylinder ' + cur + ' (distance=' + dist + '). '
-        + (remaining.length ? remaining.length + ' request(s) remaining: [' + remaining.join(',') + '].' : 'Last request in sweep — will jump back to lowest pending cylinder.');
+      narration = variant + ' sweeping to cylinder ' + cur + ' (Distance ' + dist + '). '
+        + (variant === 'C-LOOK'
+          ? 'C-LOOK jumps to the lowest pending request after the highest — not all the way to cylinder 0, saving unnecessary seek distance. '
+          : 'C-SCAN moves in one direction only, jumping back to cylinder 0 without servicing — guaranteeing more uniform wait times across all cylinders. ')
+        + (remaining.length
+          ? remaining.length + ' request(s) remaining in this sweep: [' + remaining.join(', ') + ']. '
+          : 'Final request in this sweep — preparing to wrap around. ')
+        + 'After seek completes, Rotational Latency (~half rotation, avg 4ms at 7200 RPM) and Data Transfer Time still apply before the I/O is complete.';
       break;
     }
     default:
-      narration = 'Step ' + step + ': Moving to cylinder ' + cur + ' (distance=' + dist + ' cylinders).';
+      narration = 'Moving to cylinder ' + cur + ' (Distance ' + dist + ' cylinders).';
   }
 
   return { rule, narration, distances: distEntries, algoLabel: algo, cur, prev, dist };
@@ -1855,7 +1899,7 @@ function spawnFloatMath(from, to, dist) {
   else label.style.color = 'var(--cyan-glow)';
 
   container.appendChild(label);
-  setTimeout(() => label.remove(), 1700);
+  setTimeout(() => label.remove(), 2200);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1865,20 +1909,39 @@ const tour = {
   active: false,
   queue: [...ALGORITHMS],
   current: 0,
-  timer: null
+  timer: null,
+  originalQueue: '98,183,37,122,14,124,65,67',
+  originalHead: 53
+};
+
+// Educational pause summaries injected into narrator during inter-algo pauses
+const TOUR_PAUSE_NOTES = {
+  'FCFS':   'FCFS Complete. This is the fairness baseline — no request ever starves, but the head zigzagged across the platter. After each seek the drive still waits for Rotational Latency (~4ms avg) before data transfer begins. Watch how SSTF dramatically reduces seek distance next.',
+  'SSTF':   'SSTF Complete. Greedy nearest-first logic cut head movement significantly, but notice any distant cylinders that were repeatedly skipped — that is Starvation. The saved Seek Time is real, but fairness is compromised. SCAN eliminates starvation via its sweep model.',
+  'SCAN':   'SCAN Complete. The Elevator Algorithm guarantees bounded wait times — no request starves. The head always sweeps to the disk boundary before reversing, which wastes some travel. LOOK eliminates those boundary overruns. Rotational Latency and Transfer Time apply after every seek regardless of algorithm.',
+  'C-SCAN': 'C-SCAN Complete. Circular SCAN provides more uniform wait times by serving requests in one direction only, then jumping back to cylinder 0 without servicing. This eliminates the edge-cylinder bias of regular SCAN. C-LOOK will optimize this further by not jumping all the way to cylinder 0.',
+  'LOOK':   'LOOK Complete. By reversing at the last actual request rather than the disk boundary, LOOK saved unnecessary head travel vs SCAN. Rotational Latency is unaffected by scheduling — it depends purely on disk RPM. C-LOOK applies this same optimization to the circular model.',
+  'C-LOOK': 'C-LOOK Complete. This is the final and most efficient algorithm — circular sweep to the last high request, then jump directly to the lowest pending cylinder. No wasted boundary travel, uniform wait times. Total Access Time = Seek + Rotational Latency + Transfer. Scheduling optimizes only the first component.'
 };
 
 function startGrandTour() {
   if (tour.active) { cancelTour(); return; }
   if (state.playing) togglePlay();
 
-  tour.active = true;
-  tour.queue  = [...ALGORITHMS];
+  // ── Initialization: clear log, reset head to 53, restore classic queue ──
+  clearLog();
+  document.getElementById('queueInput').value = tour.originalQueue;
+  document.getElementById('headPos').value = tour.originalHead;
+  validateInput();
+
+  tour.active  = true;
+  tour.queue   = [...ALGORITHMS];
   tour.current = 0;
   document.getElementById('tourBar').style.display = 'flex';
   document.getElementById('btnTour').classList.add('active');
   document.getElementById('btnTour').textContent = '⏹ STOP TOUR';
   log('[ GRAND TOUR ] Starting automated tour of all 6 algorithms...');
+  log('[ GRAND TOUR ] Queue: [' + tour.originalQueue + '] | Head: ' + tour.originalHead);
   runTourStep();
 }
 
@@ -1895,12 +1958,16 @@ function cancelTour() {
 function runTourStep() {
   if (!tour.active) return;
   if (tour.current >= tour.queue.length) {
-    // Tour complete — show comparison finale
     finishTour();
     return;
   }
 
   const algo = tour.queue[tour.current];
+
+  // ── Full reset between algorithms so comparison is scientifically valid ──
+  document.getElementById('queueInput').value = tour.originalQueue;
+  document.getElementById('headPos').value = tour.originalHead;
+  validateInput();
   selectAlgo(algo);
 
   const total = tour.queue.length;
@@ -1908,7 +1975,6 @@ function runTourStep() {
   document.getElementById('tourProgressBar').style.width = ((tour.current / total) * 100) + '%';
   log('[ GRAND TOUR ] Running: ' + algo + ' (' + (tour.current + 1) + '/' + total + ')');
 
-  // Start playing — use the animation callback to know when done
   initSim();
   tourPlayAll();
 }
@@ -1920,18 +1986,37 @@ function tourPlayAll() {
   document.getElementById('tourStepLabel').textContent = stepLabel;
 
   if (!cont) {
-    // This algorithm finished — wait then move to next
+    // ── Algorithm complete: inject 5-second Educational Pause ──
+    const algo = tour.queue[tour.current];
+    const totalMov = state.totalSeek;
+
+    // Show summary in narrator
+    const ruleEl = document.getElementById('narratorRule');
+    const bodyEl = document.getElementById('narratorBody');
+    const boxEl  = document.getElementById('narratorBox');
+    if (ruleEl) ruleEl.textContent = algo + ' — Algorithm Complete. Total Head Movement: ' + totalMov + ' cylinders.';
+    if (bodyEl) {
+      bodyEl.textContent = (TOUR_PAUSE_NOTES[algo] || 'Algorithm complete. Preparing next sequence...') + ' Preparing next sequence...';
+      bodyEl.classList.add('has-text');
+    }
+    if (boxEl) {
+      boxEl.style.animation = 'none';
+      boxEl.offsetHeight;
+      boxEl.style.animation = 'narratorIn 0.3s ease-out';
+    }
+
+    log('[ GRAND TOUR ] ' + algo + ' done. Total: ' + totalMov + ' | Pausing 5s for review...');
+
     tour.current++;
     tour.timer = setTimeout(() => {
       if (tour.active) runTourStep();
-    }, 1400);
+    }, 5000);   // 5-second educational pause
     return;
   }
-  // Schedule next step using animation speed
+  // Schedule next step
   const delay = Math.max(state.speed, 80);
   tour.timer = setTimeout(() => {
     if (tour.active) {
-      // Wait for head animation to settle, then next step
       const waitForAnim = anim.active ? anim.duration : 0;
       setTimeout(tourPlayAll, waitForAnim);
     }
@@ -1951,17 +2036,37 @@ function finishTour() {
   const compPanel = document.querySelector('#compTable').closest('.panel');
   if (compPanel) {
     compPanel.style.borderColor = 'var(--cyan)';
-    compPanel.style.boxShadow = '0 0 20px rgba(0,229,255,0.3)';
+    compPanel.style.boxShadow = '0 0 28px rgba(0,229,255,0.45)';
     setTimeout(() => {
       compPanel.style.borderColor = '';
       compPanel.style.boxShadow = '';
-    }, 3000);
+    }, 3500);
+
+    // ── Smooth scroll to comparison table so it is centered on screen ──
+    setTimeout(() => {
+      compPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
   }
 
+  // Finale narrator message
   const results = state.compResults;
-  const winner  = Object.entries(results).sort((a,b) => a[1]-b[1])[0];
-  log('[ GRAND TOUR ] ✓ Complete! Winner for this workload: ' + winner[0] + ' (' + winner[1] + ' cylinders total)');
-  log('[ GRAND TOUR ] See the Comparison Table for full rankings ↑');
+  const sorted  = Object.entries(results).sort((a,b) => a[1]-b[1]);
+  const winner  = sorted[0];
+  const loser   = sorted[sorted.length - 1];
+  const ruleEl  = document.getElementById('narratorRule');
+  const bodyEl  = document.getElementById('narratorBody');
+  if (ruleEl) ruleEl.textContent = 'Grand Tour Complete — All 6 Algorithms Benchmarked';
+  if (bodyEl) {
+    bodyEl.textContent = 'Winner for this workload: ' + winner[0] + ' with ' + winner[1] + ' total cylinders of head movement. '
+      + loser[0] + ' required ' + loser[1] + ' cylinders — ' + Math.round((1 - winner[1]/loser[1])*100) + '% more travel. '
+      + 'Remember: scheduling only optimizes Seek Time. Rotational Latency and Data Transfer Time are hardware constants. '
+      + 'See the Comparison Table for full rankings.';
+    bodyEl.classList.add('has-text');
+  }
+
+  log('[ GRAND TOUR ] Complete! Winner: ' + winner[0] + ' (' + winner[1] + ' cylinders)');
+  log('[ GRAND TOUR ] Full results: ' + sorted.map(([a,v]) => a + '=' + v).join(' | '));
+  log('[ GRAND TOUR ] See the Comparison Table for rankings ↑');
 }
 
 // ═══════════════════════════════════════════════════════
