@@ -272,6 +272,180 @@
     #mainGrid { grid-template-columns: 240px 1fr !important; }
     .right-col { display: none; }
   }
+
+  /* ── TUTORIAL SYSTEM ── */
+  #tutorialBtn {
+    position: fixed; bottom: 18px; right: 18px; z-index: 9000;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(5,10,15,0.85);
+    border: 1px solid var(--cyan-dim);
+    color: var(--cyan-dim);
+    font-family: 'Orbitron', monospace;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 0 0 0 0 rgba(0,229,255,0);
+  }
+  #tutorialBtn:hover {
+    border-color: var(--cyan); color: var(--cyan);
+    box-shadow: 0 0 14px rgba(0,229,255,0.3);
+    transform: scale(1.1);
+  }
+  #tutorialBtn.pulsing {
+    animation: tutPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes tutPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(0,229,255,0.0); border-color: var(--cyan-dim); color: var(--cyan-dim); }
+    50%      { box-shadow: 0 0 0 6px rgba(0,229,255,0.12); border-color: var(--cyan); color: var(--cyan); }
+  }
+
+  /* Backdrop */
+  #tutorialOverlay {
+    position: fixed; inset: 0; z-index: 9001;
+    background: rgba(2,6,12,0.82);
+    backdrop-filter: blur(3px);
+    display: none; align-items: center; justify-content: center;
+    animation: tutFadeIn 0.2s ease-out;
+  }
+  #tutorialOverlay.visible { display: flex; }
+  @keyframes tutFadeIn { from{opacity:0} to{opacity:1} }
+
+  /* Modal card */
+  #tutorialModal {
+    width: min(680px, 94vw);
+    max-height: 88vh;
+    background: linear-gradient(160deg, #070f1c 0%, #040c16 100%);
+    border: 1px solid var(--border2);
+    border-top: 2px solid var(--cyan);
+    box-shadow: 0 0 60px rgba(0,0,0,0.9), 0 0 30px rgba(0,229,255,0.08);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    animation: tutSlideIn 0.25s cubic-bezier(.2,.8,.4,1);
+  }
+  @keyframes tutSlideIn { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+
+  /* Modal header */
+  .tut-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(90deg, #090f1e, #060d18);
+    flex-shrink: 0;
+  }
+  .tut-header-left { display: flex; align-items: center; gap: 10px; }
+  .tut-badge {
+    font-family: 'Orbitron', monospace; font-size: 10px; letter-spacing: 3px;
+    color: var(--cyan-dim); text-transform: uppercase;
+    border: 1px solid var(--border2); padding: 2px 8px;
+  }
+  .tut-close {
+    background: none; border: 1px solid var(--border2);
+    color: var(--cyan-dim); width: 26px; height: 26px;
+    font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; font-family: monospace;
+  }
+  .tut-close:hover { border-color: var(--red); color: var(--red); background: rgba(255,23,68,0.08); }
+
+  /* Step progress strip */
+  .tut-progress-strip {
+    display: flex; gap: 3px; padding: 8px 18px 6px;
+    flex-shrink: 0; background: #060d18;
+    border-bottom: 1px solid var(--border);
+  }
+  .tut-pip {
+    flex: 1; height: 2px; background: var(--border);
+    border-radius: 2px; transition: all 0.3s; cursor: pointer;
+  }
+  .tut-pip.done  { background: var(--cyan-dim); }
+  .tut-pip.active{ background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+
+  /* Step content area */
+  .tut-body {
+    flex: 1; overflow-y: auto; padding: 22px 22px 16px;
+    scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent;
+  }
+  .tut-step { display: none; }
+  .tut-step.active { display: block; animation: tutStepIn 0.2s ease-out; }
+  @keyframes tutStepIn { from{opacity:0;transform:translateX(10px)} to{opacity:1;transform:translateX(0)} }
+
+  .tut-step-num {
+    font-family: 'Orbitron', monospace; font-size: 9px; letter-spacing: 3px;
+    color: var(--cyan-dim); margin-bottom: 6px;
+  }
+  .tut-step-title {
+    font-family: 'Orbitron', monospace; font-size: 15px; font-weight: 700;
+    color: var(--cyan-glow); text-shadow: 0 0 20px rgba(0,229,255,0.35);
+    margin-bottom: 14px; line-height: 1.3;
+  }
+  .tut-step-body {
+    font-size: 12px; color: #5ab8d8; line-height: 1.8;
+  }
+  .tut-step-body p { margin-bottom: 10px; }
+  .tut-step-body p:last-child { margin-bottom: 0; }
+
+  /* Highlight chips inside tutorial */
+  .tut-chip {
+    display: inline-block; font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; padding: 1px 7px; border: 1px solid var(--cyan-dim);
+    color: var(--cyan); background: rgba(0,229,255,0.07); border-radius: 2px;
+    vertical-align: middle; margin: 0 2px;
+  }
+  .tut-chip.green { border-color: var(--green-dim); color: var(--green); background: rgba(0,230,118,0.06); }
+  .tut-chip.red   { border-color: #4a0010; color: var(--red); background: rgba(255,23,68,0.06); }
+  .tut-chip.dim   { border-color: var(--border); color: var(--cyan-dim); background: transparent; }
+
+  /* Visual diagram blocks */
+  .tut-diagram {
+    border: 1px solid var(--border);
+    background: rgba(0,229,255,0.025);
+    padding: 12px 14px; margin: 12px 0;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: var(--cyan-dim); line-height: 1.9;
+  }
+  .tut-diagram .hl { color: var(--cyan); }
+  .tut-diagram .gr { color: var(--green); }
+  .tut-diagram .rd { color: var(--red); }
+
+  /* Two-col grid for algo comparison */
+  .tut-grid2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0;
+  }
+  .tut-card {
+    border: 1px solid var(--border); padding: 8px 10px;
+    font-size: 11px; color: #3a7a9a; line-height: 1.6;
+  }
+  .tut-card-title {
+    font-family: 'Orbitron', monospace; font-size: 10px;
+    color: var(--cyan); letter-spacing: 1px; margin-bottom: 4px;
+  }
+
+  /* Footer nav */
+  .tut-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 18px 14px;
+    border-top: 1px solid var(--border);
+    background: #060d18; flex-shrink: 0;
+  }
+  .tut-nav-btn {
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+    letter-spacing: 2px; text-transform: uppercase;
+    border: 1px solid var(--border2); background: transparent;
+    color: var(--cyan-dim); padding: 5px 14px; cursor: pointer; transition: all 0.15s;
+  }
+  .tut-nav-btn:hover:not(:disabled) {
+    border-color: var(--cyan); color: var(--cyan);
+    background: rgba(0,229,255,0.07); box-shadow: 0 0 10px rgba(0,229,255,0.2);
+  }
+  .tut-nav-btn:disabled { opacity: 0.25; cursor: default; }
+  .tut-nav-btn.primary {
+    border-color: var(--cyan); color: var(--cyan);
+    background: rgba(0,229,255,0.08);
+  }
+  .tut-nav-btn.primary:hover { background: rgba(0,229,255,0.15); box-shadow: 0 0 14px rgba(0,229,255,0.3); }
+  .tut-counter {
+    font-family: 'Orbitron', monospace; font-size: 10px;
+    color: var(--cyan-dim); letter-spacing: 2px;
+  }
 </style>
 </head>
 <body class="min-h-screen p-2">
@@ -2114,6 +2288,301 @@ log('[ TIP ] SPACE=play/pause  →=step  R=reset  P=present  1–6=algo  ⚡=Gra
 
 document.getElementById('queueInput').addEventListener('change', () => { if (validateInput()) { resetSim(); runAllComparison(); } });
 document.getElementById('headPos').addEventListener('change', () => { resetSim(); runAllComparison(); });
+</script>
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TUTORIAL BUTTON (inconspicuous bottom-right badge) -->
+<!-- ═══════════════════════════════════════════════════ -->
+<button id="tutorialBtn" class="pulsing" onclick="openTutorial()" title="Open tutorial">?</button>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TUTORIAL OVERLAY + MODAL                           -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div id="tutorialOverlay" onclick="tutOverlayClick(event)">
+  <div id="tutorialModal">
+
+    <!-- Header -->
+    <div class="tut-header">
+      <div class="tut-header-left">
+        <div class="tut-badge">Disk Scheduler — Tutorial</div>
+        <div style="font-size:10px;color:var(--cyan-dim);letter-spacing:1px">DEEP SPACE v3</div>
+      </div>
+      <button class="tut-close" onclick="closeTutorial()">✕</button>
+    </div>
+
+    <!-- Step progress pips -->
+    <div class="tut-progress-strip" id="tutPips"></div>
+
+    <!-- Step content -->
+    <div class="tut-body">
+
+      <!-- ─── Step 0: Welcome ─── -->
+      <div class="tut-step active" data-step="0">
+        <div class="tut-step-num">STEP 01 / 09 · INTRODUCTION</div>
+        <div class="tut-step-title">Welcome to the Disk Scheduler</div>
+        <div class="tut-step-body">
+          <p>This simulator lets you <strong style="color:var(--cyan)">visualize and compare six real OS disk-scheduling algorithms</strong> used by operating systems to minimize the time a hard drive's read/write head spends seeking between data tracks.</p>
+          <div class="tut-diagram">
+            <span class="hl">TOTAL ACCESS TIME</span> = Seek Time + Rotational Latency + Transfer Time<br>
+            <br>
+            <span class="hl">Seek Time</span>      — head moves to the right <span class="hl">cylinder</span> (what this sim optimizes)<br>
+            <span style="color:#3a7a9a">Rot. Latency</span>  — disk spins so the right <span class="hl">sector</span> is under the head<br>
+            <span style="color:#3a7a9a">Transfer Time</span> — data is actually read or written
+          </div>
+          <p>This tutorial walks through every section of the UI. Use the <strong style="color:var(--cyan)">→ NEXT</strong> button or click any pip at the top to jump to a section.</p>
+        </div>
+      </div>
+
+      <!-- ─── Step 1: Algorithms ─── -->
+      <div class="tut-step" data-step="1">
+        <div class="tut-step-num">STEP 02 / 09 · ALGORITHM SELECTOR</div>
+        <div class="tut-step-title">Choosing an Algorithm</div>
+        <div class="tut-step-body">
+          <p>The <strong style="color:var(--cyan)">Algorithm panel</strong> (top-left) lets you switch between the six scheduling strategies. You can also press keys <span class="tut-chip">1</span> through <span class="tut-chip">6</span>.</p>
+          <div class="tut-grid2">
+            <div class="tut-card">
+              <div class="tut-card-title">FCFS</div>
+              Serves requests in strict arrival order. Fair, but the head zigzags wildly.
+            </div>
+            <div class="tut-card">
+              <div class="tut-card-title">SSTF</div>
+              Always jumps to the <em>nearest</em> pending cylinder. Fast, but distant requests can starve.
+            </div>
+            <div class="tut-card">
+              <div class="tut-card-title">SCAN / LOOK</div>
+              Elevator model — sweeps in one direction, then reverses. LOOK stops at the last real request instead of the disk edge.
+            </div>
+            <div class="tut-card">
+              <div class="tut-card-title">C-SCAN / C-LOOK</div>
+              One-direction sweep only, then wraps around. Uniform wait times. C-LOOK skips the jump to cylinder 0.
+            </div>
+          </div>
+          <p>Switching algorithm instantly recomputes the sequence. You can compare them all at once with the <span class="tut-chip">⚡ GRAND TOUR</span> button.</p>
+        </div>
+      </div>
+
+      <!-- ─── Step 2: Request Queue ─── -->
+      <div class="tut-step" data-step="2">
+        <div class="tut-step-num">STEP 03 / 09 · REQUEST QUEUE</div>
+        <div class="tut-step-title">Setting Up the Request Queue</div>
+        <div class="tut-step-body">
+          <p>The <strong style="color:var(--cyan)">Request Queue panel</strong> defines which disk cylinders (0–199) are waiting to be served.</p>
+          <div class="tut-diagram">
+            <span class="hl">CYLINDER REQUESTS</span>: 98, 183, 37, 122, 14, 124, 65, 67<br>
+            <span class="hl">HEAD POSITION</span>   : 53  ← where the head starts<br>
+            <br>
+            Colored chips below the input show each request's status:<br>
+            <span class="gr">GREEN</span> = currently being served &nbsp;|&nbsp;
+            <span class="hl">CYAN</span> = pending &nbsp;|&nbsp;
+            <span style="color:#3a7a9a">dim</span> = done
+          </div>
+          <p><strong style="color:var(--cyan)">Presets</strong> load curated scenarios: <span class="tut-chip">CLASSIC</span> is the standard textbook example, <span class="tut-chip dim">STARVATION</span> is engineered to show SSTF's weakness, and <span class="tut-chip dim">HIGH LOAD</span> stresses all algorithms with 12 requests.</p>
+          <p>Use <span class="tut-chip">⚄ RANDOM</span> to generate a random set, or type any comma-separated values directly into the input field.</p>
+        </div>
+      </div>
+
+      <!-- ─── Step 3: Playback ─── -->
+      <div class="tut-step" data-step="3">
+        <div class="tut-step-num">STEP 04 / 09 · PLAYBACK CONTROLS</div>
+        <div class="tut-step-title">Playing and Stepping Through</div>
+        <div class="tut-step-body">
+          <p>The <strong style="color:var(--cyan)">Playback panel</strong> controls the simulation tempo.</p>
+          <div class="tut-diagram">
+            <span class="gr">▶ PLAY</span>     — auto-run every step with animation<br>
+            <span class="hl">⏭ STEP</span>     — advance exactly one move at a time<br>
+            <span class="rd">↺ RESET</span>    — go back to step 0, keep current settings<br>
+            <span class="hl">SPEED slider</span> — from 80ms (fast) to 2000ms (very slow)
+          </div>
+          <p>The <strong style="color:var(--cyan)">progress bar</strong> and step counter below the buttons show how far through the sequence you are. The status badge reads <span class="tut-chip green">RUNNING</span>, <span class="tut-chip">PAUSED</span>, or <span class="tut-chip dim">COMPLETE</span>.</p>
+          <p>Keyboard shortcuts mirror all controls: <span class="tut-chip">SPACE</span> = Play/Pause, <span class="tut-chip">→</span> = Step, <span class="tut-chip">R</span> = Reset.</p>
+        </div>
+      </div>
+
+      <!-- ─── Step 4: Disk diagram ─── -->
+      <div class="tut-step" data-step="4">
+        <div class="tut-step-num">STEP 05 / 09 · DISK DIAGRAM</div>
+        <div class="tut-step-title">Reading the Disk Architecture View</div>
+        <div class="tut-step-body">
+          <p>The <strong style="color:var(--cyan)">Disk Architecture canvas</strong> (top-center) shows a top-down cross-section of the hard disk platter.</p>
+          <div class="tut-diagram">
+            Concentric rings = <span class="hl">tracks / cylinders</span> (0 = center, 199 = edge)<br>
+            <span class="rd">Red ring</span>       = current head position<br>
+            <span class="hl">Cyan rings</span>     = pending request locations<br>
+            Actuator arm    = moves radially as the head seeks<br>
+            Cylinder ruler (right edge) = precise position indicator
+          </div>
+          <p>The actuator arm animates in real time as the head moves between cylinders. The <strong style="color:var(--cyan)">motion trail</strong> (faint arc) shows the last few positions visited, giving you a sense of seek direction and distance.</p>
+          <p><em style="color:var(--cyan-dim)">Note: SSDs have no moving head — scheduling is a hard-disk (HDD) concept. This simulator models a classic HDD with 200 cylinders.</em></p>
+        </div>
+      </div>
+
+      <!-- ─── Step 5: Chart ─── -->
+      <div class="tut-step" data-step="5">
+        <div class="tut-step-num">STEP 06 / 09 · HEAD MOVEMENT CHART</div>
+        <div class="tut-step-title">Reading the Movement Chart</div>
+        <div class="tut-step-body">
+          <p>The <strong style="color:var(--cyan)">Head Movement Chart</strong> (center) is the primary analysis view. The X-axis is time (steps) and the Y-axis is cylinder number.</p>
+          <div class="tut-diagram">
+            <span class="gr">Green line</span>  = path already travelled (serviced)<br>
+            <span style="color:rgba(0,229,255,0.35)">Dashed line</span> = full planned sequence (preview)<br>
+            <span class="rd">Red dot</span>     = current head position (animated)<br>
+            <span class="gr">Green dots</span>  = serviced requests<br>
+            <span class="hl">Cyan dots</span>   = pending requests<br>
+            Floating labels = <span class="hl">|from − to| = distance</span> on each move
+          </div>
+          <p>The <strong style="color:var(--cyan)">floating math overlays</strong> show the seek distance calculation for each step in real time. Distance color codes: <span class="tut-chip">cyan</span> = short, <span style="color:#ffcc80">amber</span> = medium, <span class="tut-chip red">red</span> = long jump.</p>
+          <p>A steep diagonal line on the chart means a large seek. A flat or near-horizontal line means a short, efficient move.</p>
+        </div>
+      </div>
+
+      <!-- ─── Step 6: Narrator ─── -->
+      <div class="tut-step" data-step="6">
+        <div class="tut-step-num">STEP 07 / 09 · LIVE NARRATOR</div>
+        <div class="tut-step-title">The Live Narrator Panel</div>
+        <div class="tut-step-body">
+          <p>The <strong style="color:var(--cyan)">Live Narrator</strong> (bottom-center) explains every single decision the algorithm makes as it happens.</p>
+          <div class="tut-diagram">
+            <span class="hl">▸ ALGORITHM RULE</span>  — the governing logic of the current algorithm<br>
+            <span class="hl">Narration body</span>     — why this cylinder was chosen, trade-offs,<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;starvation warnings, latency context<br>
+            <span class="gr">Distance minimap</span>  — bar chart of all pending cylinders ranked<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;by distance from current head position<br>
+            <span class="rd">⚠ STARVATION</span>     — flashes if a cylinder is at high starvation risk
+          </div>
+          <p>The narrator is especially useful during <span class="tut-chip">SSTF</span> to see how far-away cylinders are getting deprioritized, and during <span class="tut-chip">SCAN</span> / <span class="tut-chip">LOOK</span> to understand the direction reversal logic.</p>
+        </div>
+      </div>
+
+      <!-- ─── Step 7: Dashboard + Comparison ─── -->
+      <div class="tut-step" data-step="7">
+        <div class="tut-step-num">STEP 08 / 09 · PERFORMANCE & COMPARISON</div>
+        <div class="tut-step-title">Dashboard, Comparison Table & Knowledge Base</div>
+        <div class="tut-step-body">
+          <p>The <strong style="color:var(--cyan)">right column</strong> houses three panels:</p>
+          <div class="tut-diagram">
+            <span class="hl">Performance Dashboard</span><br>
+            &nbsp; Total Seek, Avg Seek, Max/Min per step, Variance<br>
+            &nbsp; Efficiency needle → position vs FCFS baseline<br>
+            &nbsp; Fairness bar → how well-distributed service is<br>
+            <br>
+            <span class="hl">Algorithm Comparison Table</span><br>
+            &nbsp; Run all 6 algorithms instantly on the current queue<br>
+            &nbsp; <span class="gr">★ Winner</span> highlighted green, <span class="rd">▼ worst</span> in red<br>
+            <br>
+            <span class="hl">Knowledge Base tabs</span><br>
+            &nbsp; CONCEPTS · ALGOS · WHEN TO USE · GLOSSARY
+          </div>
+          <p>Hit <span class="tut-chip">⚡ RUN ALL</span> inside the comparison panel any time you change the queue or head position to refresh all six results simultaneously.</p>
+        </div>
+      </div>
+
+      <!-- ─── Step 8: Grand Tour + Present ─── -->
+      <div class="tut-step" data-step="8">
+        <div class="tut-step-num">STEP 09 / 09 · GRAND TOUR & PRESENTATION</div>
+        <div class="tut-step-title">Grand Tour & Presentation Mode</div>
+        <div class="tut-step-body">
+          <p><strong style="color:var(--cyan)">⚡ Grand Tour</strong> (header) runs all six algorithms back-to-back, fully automated — no interaction needed.</p>
+          <div class="tut-diagram">
+            FCFS → SSTF → SCAN → C-SCAN → LOOK → C-LOOK<br>
+            <br>
+            Each algorithm resets the queue to the <span class="hl">classic preset</span><br>
+            for a scientifically valid comparison.<br>
+            <br>
+            A <span class="hl">5-second educational pause</span> follows each algorithm,<br>
+            the narrator summarizes key take-aways, then the next<br>
+            algorithm begins. At the end, the <span class="gr">Comparison Table</span><br>
+            auto-scrolls into view with the winner highlighted.
+          </div>
+          <p><strong style="color:var(--cyan)">⊞ Present</strong> (header) or press <span class="tut-chip">P</span> to enter <em>Presentation Mode</em> — hides the side panels and enlarges the chart and disk view for screen-sharing or recording. Narrator text and stat values scale up for legibility.</p>
+          <p style="color:var(--cyan-dim);font-style:italic">You're all set. Press <strong style="color:var(--cyan)">✕</strong> or click outside this panel to close. Happy simulating!</p>
+        </div>
+      </div>
+
+    </div><!-- /tut-body -->
+
+    <!-- Footer nav -->
+    <div class="tut-footer">
+      <button class="tut-nav-btn" id="tutPrev" onclick="tutNav(-1)" disabled>← PREV</button>
+      <div class="tut-counter"><span id="tutCounterCur">1</span> / <span id="tutCounterTotal">9</span></div>
+      <button class="tut-nav-btn primary" id="tutNext" onclick="tutNav(1)">NEXT →</button>
+    </div>
+
+  </div><!-- /tutorialModal -->
+</div><!-- /tutorialOverlay -->
+
+<script>
+// ─── Tutorial controller ───────────────────────────────
+const TUT_TOTAL = 9;
+let tutStep = 0;
+
+function openTutorial() {
+  tutStep = 0;
+  document.getElementById('tutorialOverlay').classList.add('visible');
+  document.getElementById('tutorialBtn').classList.remove('pulsing');
+  buildTutPips();
+  renderTutStep();
+}
+
+function closeTutorial() {
+  document.getElementById('tutorialOverlay').classList.remove('visible');
+}
+
+function tutOverlayClick(e) {
+  if (e.target === document.getElementById('tutorialOverlay')) closeTutorial();
+}
+
+function buildTutPips() {
+  const strip = document.getElementById('tutPips');
+  strip.innerHTML = '';
+  for (let i = 0; i < TUT_TOTAL; i++) {
+    const pip = document.createElement('div');
+    pip.className = 'tut-pip';
+    pip.title = 'Jump to step ' + (i + 1);
+    pip.onclick = ((idx) => () => { tutStep = idx; renderTutStep(); })(i);
+    strip.appendChild(pip);
+  }
+}
+
+function renderTutStep() {
+  // Steps
+  document.querySelectorAll('.tut-step').forEach((el, i) => {
+    el.classList.toggle('active', i === tutStep);
+  });
+  // Pips
+  document.querySelectorAll('.tut-pip').forEach((pip, i) => {
+    pip.classList.remove('active', 'done');
+    if (i === tutStep) pip.classList.add('active');
+    else if (i < tutStep) pip.classList.add('done');
+  });
+  // Counter
+  document.getElementById('tutCounterCur').textContent = tutStep + 1;
+  document.getElementById('tutCounterTotal').textContent = TUT_TOTAL;
+  // Buttons
+  document.getElementById('tutPrev').disabled = tutStep === 0;
+  const nextBtn = document.getElementById('tutNext');
+  if (tutStep === TUT_TOTAL - 1) {
+    nextBtn.textContent = 'CLOSE ✕';
+    nextBtn.onclick = closeTutorial;
+  } else {
+    nextBtn.textContent = 'NEXT →';
+    nextBtn.onclick = () => tutNav(1);
+  }
+  // Scroll body back to top on step change
+  document.querySelector('.tut-body').scrollTop = 0;
+}
+
+function tutNav(dir) {
+  tutStep = Math.max(0, Math.min(TUT_TOTAL - 1, tutStep + dir));
+  renderTutStep();
+}
+
+// Keyboard: ESC closes, arrow keys navigate when modal is open
+document.addEventListener('keydown', e => {
+  const overlay = document.getElementById('tutorialOverlay');
+  if (!overlay.classList.contains('visible')) return;
+  if (e.key === 'Escape') { closeTutorial(); e.stopPropagation(); }
+  if (e.key === 'ArrowRight') { tutNav(1); e.preventDefault(); }
+  if (e.key === 'ArrowLeft')  { tutNav(-1); e.preventDefault(); }
+});
 </script>
 </body>
 </html>
