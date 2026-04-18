@@ -3,86 +3,123 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DISK SCHEDULER — Cylinder Access Simulator v2</title>
+<title>DISK SCHEDULER — Deep Space OS Simulator v3</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
 <style>
   :root {
-    --amber: #ffb300;
-    --amber-dim: #7a5500;
-    --amber-glow: #ffd54f;
+    /* ── Deep Space Palette ── */
+    --cyan: #00e5ff;
+    --cyan-dim: #005f73;
+    --cyan-glow: #80f0ff;
+    --cyan-faint: rgba(0,229,255,0.06);
     --green: #00e676;
     --green-dim: #1b5e20;
     --red: #ff1744;
-    --cyan: #00e5ff;
-    --cyan-dim: #004d6e;
-    --bg: #0a0a08;
-    --panel: #111109;
-    --border: #2a2a1a;
-    --scan-line: rgba(255,179,0,0.03);
+    --amber: #00e5ff;      /* remapped: primary accent = cyan */
+    --amber-dim: #005f73;
+    --amber-glow: #80f0ff;
+    --bg: #050a0f;
+    --bg2: #070d14;
+    --panel: #080f18;
+    --panel2: #0a1422;
+    --border: #0d2035;
+    --border2: #1a3a5c;
+    --scan-line: rgba(0,229,255,0.025);
+    /* keep legacy names so old canvas code still works */
+    --head-color: #00e5ff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--amber); font-family: 'Share Tech Mono', monospace; overflow-x: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    overflow-x: hidden;
+  }
+  /* Scanline CRT overlay */
   body::before {
     content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
     background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, var(--scan-line) 3px, var(--scan-line) 4px);
   }
+  /* Vignette */
   body::after {
     content: ''; position: fixed; inset: 0; z-index: 9998; pointer-events: none;
-    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(2,8,16,0.75) 100%);
   }
   .orbitron { font-family: 'Orbitron', monospace; }
   .vt323 { font-family: 'VT323', monospace; }
-  .glow { text-shadow: 0 0 8px var(--amber), 0 0 20px var(--amber-dim); }
+  .glow       { text-shadow: 0 0 8px var(--cyan), 0 0 22px var(--cyan-dim); }
   .glow-green { text-shadow: 0 0 8px var(--green), 0 0 20px var(--green-dim); }
-  .glow-red { text-shadow: 0 0 8px var(--red); }
-  .glow-cyan { text-shadow: 0 0 8px var(--cyan); color: var(--cyan); }
+  .glow-red   { text-shadow: 0 0 8px var(--red); }
+  .glow-cyan  { text-shadow: 0 0 10px var(--cyan), 0 0 30px var(--cyan-dim); color: var(--cyan); }
 
-  .panel { background: var(--panel); border: 1px solid var(--border); position: relative; overflow: hidden; }
+  /* ── Panels ── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    position: relative; overflow: hidden;
+  }
   .panel::before {
     content: ''; position: absolute; inset: 0;
-    background: linear-gradient(135deg, rgba(255,179,0,0.02) 0%, transparent 50%);
+    background: linear-gradient(135deg, rgba(0,229,255,0.015) 0%, transparent 60%);
     pointer-events: none;
   }
   .panel-header {
-    background: linear-gradient(90deg, #1a1a0a 0%, #0f0f08 100%);
-    border-bottom: 1px solid var(--amber-dim);
+    background: linear-gradient(90deg, #0a1828 0%, #070d16 100%);
+    border-bottom: 1px solid var(--border2);
     padding: 6px 12px; font-size: 11px; letter-spacing: 3px;
-    color: var(--amber-dim); text-transform: uppercase;
+    color: var(--cyan-dim); text-transform: uppercase;
   }
-  .panel-header span { color: var(--amber); }
+  .panel-header span { color: var(--cyan); }
 
+  /* ── Buttons ── */
   .btn {
     font-family: 'Share Tech Mono', monospace; letter-spacing: 2px; text-transform: uppercase;
-    font-size: 11px; border: 1px solid var(--amber-dim); background: transparent;
-    color: var(--amber); padding: 6px 14px; cursor: pointer; transition: all 0.15s; position: relative; overflow: hidden;
+    font-size: 11px; border: 1px solid var(--cyan-dim); background: transparent;
+    color: var(--cyan); padding: 6px 14px; cursor: pointer; transition: all 0.15s;
+    position: relative; overflow: hidden; min-height: 32px;
   }
-  .btn:hover { background: rgba(255,179,0,0.1); border-color: var(--amber); box-shadow: 0 0 12px rgba(255,179,0,0.3); color: var(--amber-glow); }
+  .btn:hover {
+    background: rgba(0,229,255,0.08);
+    border-color: var(--cyan);
+    box-shadow: 0 0 14px rgba(0,229,255,0.25), inset 0 0 8px rgba(0,229,255,0.04);
+    color: var(--cyan-glow);
+  }
   .btn:active { transform: scale(0.97); }
-  .btn.active { background: rgba(255,179,0,0.15); border-color: var(--amber); box-shadow: 0 0 16px rgba(255,179,0,0.4); color: var(--amber-glow); }
+  .btn.active {
+    background: rgba(0,229,255,0.12);
+    border-color: var(--cyan);
+    box-shadow: 0 0 18px rgba(0,229,255,0.35);
+    color: var(--cyan-glow);
+  }
   .btn-green { border-color: var(--green-dim); color: var(--green); }
   .btn-green:hover { background: rgba(0,230,118,0.1); border-color: var(--green); box-shadow: 0 0 12px rgba(0,230,118,0.3); }
   .btn-green.active { background: rgba(0,230,118,0.15); border-color: var(--green); }
-  .btn-red { border-color: #7f0000; color: var(--red); }
+  .btn-red { border-color: #4a0010; color: var(--red); }
   .btn-red:hover { background: rgba(255,23,68,0.1); border-color: var(--red); box-shadow: 0 0 12px rgba(255,23,68,0.3); }
   .btn-cyan { border-color: var(--cyan-dim); color: var(--cyan); font-size: 10px; padding: 4px 10px; }
   .btn-cyan:hover { background: rgba(0,229,255,0.08); border-color: var(--cyan); box-shadow: 0 0 10px rgba(0,229,255,0.3); }
   .btn-cyan.active { background: rgba(0,229,255,0.15); border-color: var(--cyan); }
+  .btn-tour { border-color: #1a3a5c; color: #5bc8e8; font-size: 10px; padding: 4px 10px; }
+  .btn-tour:hover { background: rgba(91,200,232,0.1); border-color: var(--cyan); box-shadow: 0 0 10px rgba(0,229,255,0.3); color: var(--cyan); }
+  .btn-tour.active { background: rgba(0,229,255,0.18); border-color: var(--cyan); color: var(--cyan-glow); box-shadow: 0 0 20px rgba(0,229,255,0.4); }
 
+  /* ── Inputs ── */
   input[type="text"], input[type="number"] {
-    background: #080805; border: 1px solid var(--border); color: var(--amber);
-    font-family: 'Share Tech Mono', monospace; font-size: 13px; padding: 5px 10px; outline: none; transition: border-color 0.2s;
+    background: #040810; border: 1px solid var(--border);
+    color: var(--cyan); font-family: 'Share Tech Mono', monospace;
+    font-size: 13px; padding: 5px 10px; outline: none; transition: border-color 0.2s;
   }
-  input:focus { border-color: var(--amber-dim); box-shadow: 0 0 8px rgba(255,179,0,0.15); }
+  input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 8px rgba(0,229,255,0.15); }
   input.input-error { border-color: var(--red) !important; box-shadow: 0 0 8px rgba(255,23,68,0.3) !important; }
-  input[type="range"] { accent-color: var(--amber); cursor: pointer; }
+  input[type="range"] { accent-color: var(--cyan); cursor: pointer; }
 
   #diskCanvas, #chartCanvas { display: block; width: 100%; }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--amber-dim); }
-  ::-webkit-scrollbar-thumb:hover { background: var(--amber); }
+  ::-webkit-scrollbar-thumb { background: var(--cyan-dim); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--cyan); }
 
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
   .blink { animation: blink 1s infinite; }
@@ -91,50 +128,98 @@
   @keyframes statusPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .status-active { animation: statusPulse 1.2s infinite; }
   @keyframes chipChosen {
-    0%{background:rgba(0,230,118,0.05);border-color:var(--green-dim)}
-    40%{background:rgba(0,230,118,0.3);border-color:var(--green);box-shadow:0 0 10px rgba(0,230,118,0.6)}
-    100%{background:rgba(0,230,118,0.08);border-color:var(--green)}
+    0%{background:rgba(0,229,255,0.03);border-color:var(--cyan-dim)}
+    40%{background:rgba(0,229,255,0.25);border-color:var(--cyan);box-shadow:0 0 12px rgba(0,229,255,0.5)}
+    100%{background:rgba(0,229,255,0.08);border-color:var(--cyan)}
   }
   .chip-chosen { animation: chipChosen 0.7s ease-out forwards; }
   @keyframes decisionSlide { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
   .decision-animate { animation: decisionSlide 0.25s ease-out; }
 
-  .progress-bar { height: 4px; background: linear-gradient(90deg,var(--amber-dim),var(--amber)); box-shadow: 0 0 8px var(--amber); transition: width 0.15s ease; }
-  .stat-val { font-family: 'Orbitron', monospace; font-size: 17px; color: var(--amber-glow); text-shadow: 0 0 10px var(--amber); }
-  .stat-val-sm { font-family: 'Orbitron', monospace; font-size: 12px; color: var(--amber-glow); text-shadow: 0 0 6px var(--amber); }
+  /* Floating math label */
+  @keyframes floatUp { 0%{opacity:0;transform:translateY(0)} 20%{opacity:1} 80%{opacity:1} 100%{opacity:0;transform:translateY(-28px)} }
+  .float-math { position:absolute; pointer-events:none; font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--cyan-glow); text-shadow:0 0 8px var(--cyan); animation:floatUp 1.6s ease-out forwards; white-space:nowrap; z-index:100; }
+
+  /* Starvation flash overlay */
+  @keyframes starveFlash { 0%,100%{opacity:0} 50%{opacity:1} }
+  .starve-overlay { animation: starveFlash 0.5s ease-in-out 3; }
+
+  .progress-bar { height: 4px; background: linear-gradient(90deg,var(--cyan-dim),var(--cyan)); box-shadow: 0 0 8px var(--cyan); transition: width 0.15s ease; }
+
+  .stat-val { font-family: 'Orbitron', monospace; font-size: 17px; color: var(--cyan-glow); text-shadow: 0 0 10px var(--cyan); }
+  .stat-val-sm { font-family: 'Orbitron', monospace; font-size: 12px; color: var(--cyan-glow); text-shadow: 0 0 6px var(--cyan); }
 
   .tab-btn { transition: all 0.2s; }
-  .tab-btn.active { color: var(--amber); border-bottom: 2px solid var(--amber); }
+  .tab-btn.active { color: var(--cyan); border-bottom: 2px solid var(--cyan); }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  .log-entry { border-left: 2px solid var(--amber-dim); padding-left: 8px; margin-bottom: 4px; font-size: 11px; color: #887733; transition: all 0.3s; }
-  .log-entry.highlight { border-color: var(--amber); color: var(--amber); }
+  .log-entry { border-left: 2px solid var(--cyan-dim); padding-left: 8px; margin-bottom: 4px; font-size: 11px; color: #245060; transition: all 0.3s; }
+  .log-entry.highlight { border-color: var(--cyan); color: var(--cyan); }
 
   .algo-card { border: 1px solid var(--border); padding: 10px; margin-bottom: 8px; transition: all 0.2s; }
-  .algo-card:hover { border-color: var(--amber-dim); }
-  .algo-name { color: var(--amber); font-size: 12px; letter-spacing: 2px; }
-  .algo-desc { color: #665522; font-size: 11px; margin-top: 4px; line-height: 1.5; }
+  .algo-card:hover { border-color: var(--cyan-dim); background: var(--cyan-faint); }
+  .algo-name { color: var(--cyan); font-size: 12px; letter-spacing: 2px; }
+  .algo-desc { color: #2a5a70; font-size: 11px; margin-top: 4px; line-height: 1.5; }
   .algo-tag { display: inline-block; font-size: 9px; padding: 1px 6px; border: 1px solid; margin-top: 4px; margin-right: 4px; letter-spacing: 1px; }
   .tag-fair { border-color: var(--green-dim); color: var(--green); }
-  .tag-fast { border-color: var(--amber-dim); color: var(--amber); }
-  .tag-starvation { border-color: #7f0000; color: var(--red); }
-  .tag-balanced { border-color: #1a5a4a; color: #00bfa5; }
+  .tag-fast { border-color: var(--cyan-dim); color: var(--cyan); }
+  .tag-starvation { border-color: #4a0010; color: var(--red); }
+  .tag-balanced { border-color: #1a3a5c; color: #5bc8e8; }
 
   .preset-btn {
     font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px;
     text-transform: uppercase; border: 1px solid var(--border); background: transparent;
-    color: var(--amber-dim); padding: 3px 7px; cursor: pointer; transition: all 0.15s;
+    color: var(--cyan-dim); padding: 3px 7px; cursor: pointer; transition: all 0.15s;
   }
-  .preset-btn:hover { border-color: var(--amber-dim); color: var(--amber); background: rgba(255,179,0,0.05); }
+  .preset-btn:hover { border-color: var(--cyan-dim); color: var(--cyan); background: rgba(0,229,255,0.05); }
 
   .dist-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 10px; }
-  .dist-bar-outer { flex: 1; height: 3px; background: rgba(255,179,0,0.08); position: relative; }
+  .dist-bar-outer { flex: 1; height: 3px; background: rgba(0,229,255,0.06); position: relative; }
   .dist-bar-inner { height: 3px; transition: width 0.4s ease; }
   .dist-chosen .dist-bar-inner { background: linear-gradient(90deg, var(--green), #00ffa3); box-shadow: 0 0 4px var(--green); }
-  .dist-rejected .dist-bar-inner { background: rgba(255,179,0,0.25); }
+  .dist-rejected .dist-bar-inner { background: rgba(0,229,255,0.18); }
   .dist-chosen-label { color: var(--green); text-shadow: 0 0 4px var(--green); }
-  .dist-rejected-label { color: var(--amber-dim); }
+  .dist-rejected-label { color: var(--cyan-dim); }
+
+  /* Narrator panel */
+  .narrator-panel {
+    background: linear-gradient(135deg, #06101a 0%, #040c14 100%);
+    border: 1px solid var(--border2);
+    border-left: 3px solid var(--cyan);
+    padding: 10px 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .narrator-panel::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, var(--cyan), transparent);
+    opacity: 0.5;
+  }
+  .narrator-title {
+    font-size: 9px; letter-spacing: 3px; color: var(--cyan-dim);
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  .narrator-rule {
+    font-size: 12px; color: var(--cyan); text-shadow: 0 0 8px rgba(0,229,255,0.4);
+    margin-bottom: 6px; line-height: 1.4;
+  }
+  .narrator-body {
+    font-size: 11px; color: #3a7a9a; line-height: 1.65;
+    font-style: italic;
+  }
+  .narrator-body.has-text { color: #5ab8d8; }
+  @keyframes narratorIn { from{opacity:0;border-left-color:var(--cyan-dim)} to{opacity:1;border-left-color:var(--cyan)} }
+  .narrator-animate { animation: narratorIn 0.3s ease-out; }
+
+  /* Grand Tour */
+  .tour-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:9px; letter-spacing:2px; padding:3px 8px;
+    border:1px solid var(--cyan-dim); color:var(--cyan);
+    background:rgba(0,229,255,0.08);
+  }
 
   body.presentation .left-col,
   body.presentation .right-col { display: none !important; }
@@ -142,13 +227,24 @@
   body.presentation #chartCanvas { height: 360px !important; }
   body.presentation #diskCanvas { height: 180px !important; }
 
-  .kbd { display: inline-block; border: 1px solid #2a2a1a; padding: 1px 5px; font-size: 9px; color: var(--amber-dim); border-radius: 2px; background: #0a0a05; }
+  .kbd { display: inline-block; border: 1px solid var(--border2); padding: 1px 5px; font-size: 9px; color: var(--cyan-dim); border-radius: 2px; background: #040b14; }
 
-  .efficiency-track { height: 5px; background: linear-gradient(90deg, var(--green) 0%, var(--amber) 50%, var(--red) 100%); border-radius: 2px; position: relative; }
+  .efficiency-track { height: 5px; background: linear-gradient(90deg, var(--green) 0%, var(--cyan) 50%, var(--red) 100%); border-radius: 2px; position: relative; }
   .efficiency-needle { position: absolute; top: -5px; width: 2px; height: 15px; background: white; border-radius: 1px; transform: translateX(-50%); box-shadow: 0 0 5px rgba(255,255,255,0.9); transition: left 0.5s ease; }
 
-  @media (max-width: 900px) {
+  /* ── MOBILE RESPONSIVE ── */
+  @media (max-width: 768px) {
     #mainGrid { grid-template-columns: 1fr !important; }
+    .right-col { display: none; }
+    .left-col { order: 2; }
+    #centerCol { order: 1; }
+    .btn { min-height: 48px; padding: 10px 14px !important; font-size: 12px !important; }
+    .preset-btn { min-height: 36px; padding: 6px 10px; }
+    #diskCanvas { height: 140px !important; }
+    #chartCanvas { height: 240px !important; }
+  }
+  @media (min-width: 769px) and (max-width: 1100px) {
+    #mainGrid { grid-template-columns: 240px 1fr !important; }
     .right-col { display: none; }
   }
 </style>
@@ -156,29 +252,48 @@
 <body class="min-h-screen p-2">
 
 <!-- HEADER -->
-<header class="panel mb-2 p-3 flex items-center justify-between">
+<header class="panel mb-2 p-3 flex items-center justify-between" style="border-color:var(--border2);background:linear-gradient(90deg,#060e1a,#050a12)">
   <div class="flex items-center gap-4">
     <div class="flex gap-1.5">
-      <div class="w-3 h-3 rounded-full bg-red-800 border border-red-600"></div>
-      <div class="w-3 h-3 rounded-full bg-yellow-800 border border-yellow-600"></div>
-      <div class="w-3 h-3 rounded-full" style="background:#1b5e20;border:1px solid #2e7d32"></div>
+      <div class="w-3 h-3 rounded-full" style="background:#3a0010;border:1px solid #6a0020"></div>
+      <div class="w-3 h-3 rounded-full" style="background:#1a2a3a;border:1px solid #2a4a6a"></div>
+      <div class="w-3 h-3 rounded-full" style="background:#003a2a;border:1px solid #005a40"></div>
     </div>
     <div>
-      <div class="orbitron text-xs tracking-widest" style="color:var(--amber-dim)">SYSTEM/OS</div>
+      <div class="orbitron text-xs tracking-widest" style="color:var(--cyan-dim)">SYSTEM / OS LAB</div>
       <div class="orbitron font-black tracking-widest glow" style="font-size:16px">DISK SCHEDULER</div>
     </div>
-    <div class="text-xs hidden md:block" style="color:var(--amber-dim);border-left:1px solid var(--border);padding-left:12px">
-      <span style="color:var(--amber)">6 ALGORITHMS</span> &nbsp;·&nbsp; SEEK TIME OPTIMIZER &nbsp;·&nbsp; EDUCATIONAL SIMULATOR
+    <div class="text-xs hidden md:block" style="color:var(--cyan-dim);border-left:1px solid var(--border2);padding-left:12px">
+      <span style="color:var(--cyan)">6 ALGORITHMS</span> &nbsp;·&nbsp; SEEK TIME OPTIMIZER &nbsp;·&nbsp; DEEP SPACE v3
     </div>
   </div>
   <div class="flex items-center gap-2">
+    <button class="btn btn-tour" id="btnTour" onclick="startGrandTour()" title="Auto-run all 6 algorithms in sequence">⚡ GRAND TOUR</button>
     <button class="btn-cyan btn" id="btnPresent" onclick="togglePresentation()" title="Toggle presentation mode (P)">⊞ PRESENT</button>
     <div class="text-right hidden sm:block ml-2">
       <div class="vt323 text-2xl glow" id="clock">00:00:00</div>
-      <div class="text-xs" style="color:var(--amber-dim);letter-spacing:2px">CYLINDER ACCESS SIM</div>
+      <div class="text-xs" style="color:var(--cyan-dim);letter-spacing:2px">CYLINDER ACCESS SIM</div>
     </div>
   </div>
 </header>
+
+<!-- GRAND TOUR STATUS BAR (hidden by default) -->
+<div id="tourBar" style="display:none" class="panel mb-2 p-2 flex items-center gap-4">
+  <div class="tour-badge">
+    <span style="color:var(--green)" class="status-active">●</span>
+    <span id="tourLabel">GRAND TOUR RUNNING</span>
+  </div>
+  <div class="flex-1">
+    <div class="flex justify-between text-xs mb-1" style="color:var(--cyan-dim)">
+      <span id="tourAlgoLabel">FCFS (1/6)</span>
+      <span id="tourStepLabel">Step 0</span>
+    </div>
+    <div class="bg-black rounded" style="height:3px">
+      <div id="tourProgressBar" class="rounded" style="height:3px;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));box-shadow:0 0 6px var(--cyan);width:0%;transition:width 0.3s"></div>
+    </div>
+  </div>
+  <button class="btn btn-red" style="padding:3px 10px;font-size:9px" onclick="cancelTour()">✕ CANCEL</button>
+</div>
 
 <!-- MAIN LAYOUT -->
 <div class="grid gap-2" id="mainGrid" style="grid-template-columns: 255px 1fr 248px;">
@@ -198,7 +313,7 @@
     <div class="panel">
       <div class="panel-header">▸ <span>Request Queue</span></div>
       <div class="p-3 flex flex-col gap-2">
-        <div class="text-xs mb-1" style="color:var(--amber-dim)">CYLINDER REQUESTS (0–199)</div>
+        <div class="text-xs mb-1" style="color:var(--cyan-dim)">CYLINDER REQUESTS (0–199)</div>
         <input type="text" id="queueInput" value="98,183,37,122,14,124,65,67" class="w-full text-sm" placeholder="e.g. 98,183,37,122" oninput="validateInput()">
         <div id="inputError" class="text-xs" style="color:var(--red);display:none">⚠ Invalid values detected (use 0–199)</div>
         <div class="flex gap-1">
@@ -206,12 +321,12 @@
           <button class="btn flex-1" onclick="generateRandom()">⚄ RANDOM</button>
         </div>
         <div class="flex gap-1 items-center">
-          <div class="text-xs" style="color:var(--amber-dim)">HEAD POS</div>
+          <div class="text-xs" style="color:var(--cyan-dim)">HEAD POS</div>
           <input type="number" id="headPos" value="53" min="0" max="199" class="flex-1 text-sm text-center">
         </div>
         <!-- Presets -->
         <div class="border-t pt-2" style="border-color:var(--border)">
-          <div class="text-xs mb-1.5" style="color:var(--amber-dim);letter-spacing:1px">PRESETS</div>
+          <div class="text-xs mb-1.5" style="color:var(--cyan-dim);letter-spacing:1px">PRESETS</div>
           <div class="flex flex-wrap gap-1">
             <button class="preset-btn" onclick="loadPreset('classic')">CLASSIC</button>
             <button class="preset-btn" onclick="loadPreset('highload')">HIGH LOAD</button>
@@ -235,7 +350,7 @@
         </div>
         <button class="btn btn-red w-full" onclick="resetSim()">↺ RESET</button>
         <div class="mt-1">
-          <div class="flex justify-between text-xs mb-1" style="color:var(--amber-dim)">
+          <div class="flex justify-between text-xs mb-1" style="color:var(--cyan-dim)">
             <span>SPEED</span>
             <span id="speedLabel">500ms</span>
           </div>
@@ -244,8 +359,8 @@
         <!-- Status + progress -->
         <div class="panel p-2 mt-1">
           <div class="flex justify-between items-center mb-1">
-            <div id="statusText" class="text-xs tracking-widest glow" style="color:var(--amber-dim)">STANDBY</div>
-            <div id="stepCounter" class="text-xs orbitron" style="color:var(--amber-dim)">— / —</div>
+            <div id="statusText" class="text-xs tracking-widest glow" style="color:var(--cyan-dim)">STANDBY</div>
+            <div id="stepCounter" class="text-xs orbitron" style="color:var(--cyan-dim)">— / —</div>
           </div>
           <div class="bg-black rounded" style="height:4px">
             <div id="progressBar" class="progress-bar rounded" style="width:0%"></div>
@@ -261,13 +376,13 @@
         <button class="btn flex-1" id="dirUp" onclick="setDir('up')">↑ HIGH</button>
         <button class="btn flex-1 active" id="dirDown" onclick="setDir('down')">↓ LOW</button>
       </div>
-      <div class="px-3 pb-3 text-xs" style="color:var(--amber-dim)">Used by SCAN, C-SCAN, LOOK, C-LOOK</div>
+      <div class="px-3 pb-3 text-xs" style="color:var(--cyan-dim)">Used by SCAN, C-SCAN, LOOK, C-LOOK</div>
     </div>
 
     <!-- Keyboard Hints -->
     <div class="panel p-2">
-      <div class="text-xs mb-1.5" style="color:var(--amber-dim);letter-spacing:2px">KEYBOARD</div>
-      <div class="flex flex-col gap-1" style="font-size:10px;color:var(--amber-dim)">
+      <div class="text-xs mb-1.5" style="color:var(--cyan-dim);letter-spacing:2px">KEYBOARD</div>
+      <div class="flex flex-col gap-1" style="font-size:10px;color:var(--cyan-dim)">
         <div><span class="kbd">SPACE</span> Play / Pause</div>
         <div><span class="kbd">→</span> Step forward</div>
         <div><span class="kbd">R</span> Reset</div>
@@ -279,45 +394,56 @@
   </div><!-- /left col -->
 
   <!-- ═══ CENTER: VISUALIZATIONS ═══ -->
-  <div class="flex flex-col gap-2">
+  <div class="flex flex-col gap-2" id="centerCol">
 
     <!-- Disk Architecture -->
     <div class="panel">
       <div class="panel-header">▸ <span>Disk Architecture</span>
-        <span style="color:var(--amber-dim)" class="ml-4 text-xs">PLATTERS · TRACKS · R/W HEAD</span>
+        <span style="color:var(--cyan-dim)" class="ml-4 text-xs">PLATTERS · TRACKS · R/W HEAD</span>
       </div>
       <div class="p-2"><canvas id="diskCanvas" height="158"></canvas></div>
     </div>
 
-    <!-- Head Movement Chart -->
-    <div class="panel flex-1">
+    <!-- HEAD MOVEMENT CHART with floating math overlay wrapper -->
+    <div class="panel flex-1" style="position:relative">
       <div class="panel-header flex items-center justify-between">
-        <span>▸ <span style="color:var(--amber)">Head Movement Chart</span></span>
-        <div class="flex items-center gap-3 text-xs" style="color:var(--amber-dim)">
+        <span>▸ <span style="color:var(--cyan)">Head Movement Chart</span></span>
+        <div class="flex items-center gap-3 text-xs" style="color:var(--cyan-dim)">
           <span>■ <span style="color:var(--green)">SERVICED</span></span>
-          <span>■ <span style="color:var(--amber)">PENDING</span></span>
+          <span>■ <span style="color:var(--cyan)">PENDING</span></span>
           <span>■ <span style="color:var(--red)">CURRENT</span></span>
         </div>
       </div>
-      <div class="p-2"><canvas id="chartCanvas" height="272"></canvas></div>
+      <div class="p-2" style="position:relative">
+        <canvas id="chartCanvas" height="272"></canvas>
+        <!-- Floating math labels container -->
+        <div id="floatMathContainer" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden"></div>
+      </div>
     </div>
 
-    <!-- DECISION PANEL -->
-    <div class="panel" id="decisionPanel">
-      <div class="panel-header">▸ <span>Current Decision</span>
-        <span id="decisionAlgoLabel" style="color:var(--cyan);margin-left:8px;font-size:10px"></span>
+    <!-- ══ LIVE NARRATOR PANEL ══ -->
+    <div class="panel" id="narratorPanel">
+      <div class="panel-header flex items-center justify-between">
+        <span>▸ <span style="color:var(--cyan)">Live Narrator</span>
+          <span id="narratorAlgoLabel" style="color:var(--cyan-dim);margin-left:8px;font-size:10px"></span>
+        </span>
+        <div id="narratorStarvWarning" style="display:none" class="starve-overlay">
+          <span style="color:var(--red);font-size:10px;text-shadow:0 0 8px var(--red)">⚠ STARVATION DETECTED</span>
+        </div>
       </div>
-      <div class="p-3 decision-animate" id="decisionContent">
-        <div class="flex gap-6">
-          <!-- Left: narration -->
+      <div class="p-3">
+        <div class="flex gap-4">
+          <!-- Narration text -->
           <div class="flex-1">
-            <div class="text-xs mb-1" style="color:var(--amber-dim);letter-spacing:2px">RULE</div>
-            <div id="decisionRule" class="text-xs mb-2" style="color:var(--cyan);text-shadow:0 0 6px var(--cyan)">Select algorithm and press PLAY or STEP</div>
-            <div id="decisionNarration" class="text-xs leading-relaxed" style="color:#887733;font-style:italic">Press STEP or PLAY to begin. The decision engine will explain each move.</div>
+            <div class="narrator-panel narrator-animate" id="narratorBox">
+              <div class="narrator-title">▸ ALGORITHM RULE</div>
+              <div class="narrator-rule" id="narratorRule">Select an algorithm and press PLAY or STEP</div>
+              <div class="narrator-body" id="narratorBody">The narrator will explain each disk head movement in real time — describing which cylinder was chosen, why it was chosen over alternatives, and what this means for scheduling fairness and efficiency.</div>
+            </div>
           </div>
-          <!-- Right: distance table -->
+          <!-- Distance minimap -->
           <div style="width:160px;flex-shrink:0">
-            <div class="text-xs mb-1" style="color:var(--amber-dim);letter-spacing:2px">DISTANCES FROM HEAD</div>
+            <div class="text-xs mb-1" style="color:var(--cyan-dim);letter-spacing:2px">DISTANCES</div>
             <div id="decisionDistances"></div>
           </div>
         </div>
@@ -330,7 +456,7 @@
         <button class="btn ml-4" style="padding:2px 8px;font-size:9px" onclick="clearLog()">CLR</button>
       </div>
       <div id="execLog" class="p-2 overflow-y-auto" style="height:90px;font-size:11px">
-        <div class="log-entry highlight">[ SYSTEM ] Disk Scheduler v2 initialized. Select algorithm and press PLAY.</div>
+        <div class="log-entry highlight">[ SYSTEM ] Disk Scheduler Deep Space v3 initialized. Select algorithm and press PLAY.</div>
       </div>
     </div>
 
@@ -344,57 +470,57 @@
       <div class="panel-header">▸ <span>Performance</span></div>
       <div class="p-3 grid grid-cols-2 gap-2">
         <div class="text-center">
-          <div class="text-xs mb-0.5" style="color:var(--amber-dim);letter-spacing:1px">TOTAL SEEK</div>
+          <div class="text-xs mb-0.5" style="color:var(--cyan-dim);letter-spacing:1px">TOTAL SEEK</div>
           <div class="stat-val" id="statTotal">0</div>
-          <div class="text-xs" style="color:var(--amber-dim)">cylinders</div>
+          <div class="text-xs" style="color:var(--cyan-dim)">cylinders</div>
         </div>
         <div class="text-center">
-          <div class="text-xs mb-0.5" style="color:var(--amber-dim);letter-spacing:1px">AVG SEEK</div>
+          <div class="text-xs mb-0.5" style="color:var(--cyan-dim);letter-spacing:1px">AVG SEEK</div>
           <div class="stat-val" id="statAvg">0.0</div>
-          <div class="text-xs" style="color:var(--amber-dim)">cyls/req</div>
+          <div class="text-xs" style="color:var(--cyan-dim)">cyls/req</div>
         </div>
         <div class="text-center">
-          <div class="text-xs mb-0.5" style="color:var(--amber-dim);letter-spacing:1px">MAX SEEK</div>
+          <div class="text-xs mb-0.5" style="color:var(--cyan-dim);letter-spacing:1px">MAX SEEK</div>
           <div class="stat-val-sm" id="statMax">—</div>
-          <div class="text-xs" style="color:var(--amber-dim)">worst step</div>
+          <div class="text-xs" style="color:var(--cyan-dim)">worst step</div>
         </div>
         <div class="text-center">
-          <div class="text-xs mb-0.5" style="color:var(--amber-dim);letter-spacing:1px">MIN SEEK</div>
+          <div class="text-xs mb-0.5" style="color:var(--cyan-dim);letter-spacing:1px">MIN SEEK</div>
           <div class="stat-val-sm" id="statMin">—</div>
-          <div class="text-xs" style="color:var(--amber-dim)">best step</div>
+          <div class="text-xs" style="color:var(--cyan-dim)">best step</div>
         </div>
         <div class="text-center">
-          <div class="text-xs mb-0.5" style="color:var(--amber-dim);letter-spacing:1px">VARIANCE</div>
+          <div class="text-xs mb-0.5" style="color:var(--cyan-dim);letter-spacing:1px">VARIANCE</div>
           <div class="stat-val-sm" id="statVar">—</div>
-          <div class="text-xs" style="color:var(--amber-dim)">consistency</div>
+          <div class="text-xs" style="color:var(--cyan-dim)">consistency</div>
         </div>
         <div class="text-center">
-          <div class="text-xs mb-0.5" style="color:var(--amber-dim);letter-spacing:1px">SERVICED</div>
+          <div class="text-xs mb-0.5" style="color:var(--cyan-dim);letter-spacing:1px">SERVICED</div>
           <div class="stat-val-sm" id="statServiced">0 / 0</div>
-          <div class="text-xs" style="color:var(--amber-dim)">requests</div>
+          <div class="text-xs" style="color:var(--cyan-dim)">requests</div>
         </div>
       </div>
       <!-- Efficiency rating -->
       <div class="border-t px-3 pb-3 pt-2" style="border-color:var(--border)">
-        <div class="flex justify-between text-xs mb-1" style="color:var(--amber-dim)">
+        <div class="flex justify-between text-xs mb-1" style="color:var(--cyan-dim)">
           <span>EFFICIENCY vs FCFS</span>
-          <span id="effLabel" style="color:var(--amber)">—</span>
+          <span id="effLabel" style="color:var(--cyan)">—</span>
         </div>
         <div class="efficiency-track">
           <div class="efficiency-needle" id="effNeedle" style="left:50%"></div>
         </div>
-        <div class="flex justify-between text-xs mt-0.5" style="color:var(--amber-dim)">
+        <div class="flex justify-between text-xs mt-0.5" style="color:var(--cyan-dim)">
           <span>BEST</span><span>WORST</span>
         </div>
       </div>
       <!-- Starvation + fairness -->
       <div class="border-t mx-3 mb-3" style="border-color:var(--border)"></div>
       <div class="px-3 pb-3">
-        <div class="text-xs mb-1" style="color:var(--amber-dim);letter-spacing:2px">FAIRNESS</div>
+        <div class="text-xs mb-1" style="color:var(--cyan-dim);letter-spacing:2px">FAIRNESS</div>
         <div class="bg-black rounded mb-1" style="height:4px">
           <div id="fairnessBar" class="rounded" style="height:4px;background:var(--green);box-shadow:0 0 4px var(--green);transition:width 0.5s;width:100%"></div>
         </div>
-        <div id="starvationPanel" class="text-xs p-2 mt-2" style="background:#080805;border:1px solid var(--border)">
+        <div id="starvationPanel" class="text-xs p-2 mt-2" style="background:#04080f;border:1px solid var(--border)">
           <div style="color:var(--green)">● NO STARVATION DETECTED</div>
         </div>
       </div>
@@ -406,7 +532,7 @@
       <div class="p-2">
         <table class="w-full text-xs" style="border-collapse:collapse">
           <thead>
-            <tr style="color:var(--amber-dim);border-bottom:1px solid var(--border)">
+            <tr style="color:var(--cyan-dim);border-bottom:1px solid var(--border)">
               <th class="text-left py-1 px-1">#</th>
               <th class="text-left py-1 px-1">ALG</th>
               <th class="text-right py-1 px-1">TOTAL</th>
@@ -415,7 +541,7 @@
           </thead>
           <tbody id="compTable"></tbody>
         </table>
-        <button class="btn w-full mt-2 text-xs" onclick="runAllComparison()">⚡ RUN ALL</button>
+        <button class="btn w-full mt-2 text-xs" style="border-color:var(--cyan-dim)" onclick="runAllComparison()">⚡ RUN ALL</button>
       </div>
     </div>
 
@@ -423,37 +549,38 @@
     <div class="panel flex-1">
       <div class="panel-header">▸ <span>Knowledge Base</span></div>
       <div class="flex border-b" style="border-color:var(--border)">
-        <button class="tab-btn active px-2 py-2 text-xs tracking-widest" style="color:var(--amber-dim)" onclick="switchTab('concepts')">CONCEPTS</button>
-        <button class="tab-btn px-2 py-2 text-xs tracking-widest" style="color:var(--amber-dim)" onclick="switchTab('algos')">ALGOS</button>
-        <button class="tab-btn px-2 py-2 text-xs tracking-widest" style="color:var(--amber-dim)" onclick="switchTab('when')">WHEN</button>
+        <button class="tab-btn active px-2 py-2 text-xs tracking-widest" style="color:var(--cyan-dim)" onclick="switchTab('concepts')">CONCEPTS</button>
+        <button class="tab-btn px-2 py-2 text-xs tracking-widest" style="color:var(--cyan-dim)" onclick="switchTab('algos')">ALGOS</button>
+        <button class="tab-btn px-2 py-2 text-xs tracking-widest" style="color:var(--cyan-dim)" onclick="switchTab('when')">WHEN</button>
+        <button class="tab-btn px-2 py-2 text-xs tracking-widest" style="color:var(--cyan-dim)" onclick="switchTab('glossary')">GLOSSARY</button>
       </div>
       <div class="p-3 overflow-y-auto" style="max-height:320px">
 
         <!-- Concepts tab -->
-        <div id="tab-concepts" class="tab-content active text-xs leading-relaxed" style="color:#887733">
+        <div id="tab-concepts" class="tab-content active text-xs leading-relaxed" style="color:#2a5a70">
           <div class="mb-3">
-            <div class="mb-1 tracking-widest" style="color:var(--amber)">① SEEK TIME</div>
-            <div>Time for the r/w head to move to the correct <span style="color:var(--amber)">track/cylinder</span>. Dominant cost. Range: 1–20ms. <span style="color:var(--amber-dim)">This is what scheduling minimizes.</span></div>
+            <div class="mb-1 tracking-widest" style="color:var(--cyan)">① SEEK TIME</div>
+            <div>Time for the r/w head to move to the correct <span style="color:var(--cyan)">track/cylinder</span>. Dominant cost. Range: 1–20ms. <span style="color:var(--cyan-dim)">This is what scheduling minimizes.</span></div>
           </div>
           <div class="mb-3">
-            <div class="mb-1 tracking-widest" style="color:var(--amber)">② ROTATIONAL LATENCY</div>
-            <div>Time for the correct <span style="color:var(--amber)">sector</span> to spin under the head. Avg = ½ rotation ≈ 2–8ms. Not influenced by scheduling.</div>
+            <div class="mb-1 tracking-widest" style="color:var(--cyan)">② ROTATIONAL LATENCY</div>
+            <div>Time for the correct <span style="color:var(--cyan)">sector</span> to spin under the head. Avg = ½ rotation ≈ 2–8ms. Not influenced by scheduling.</div>
           </div>
           <div class="mb-3">
-            <div class="mb-1 tracking-widest" style="color:var(--amber)">③ DATA TRANSFER</div>
-            <div>Time to read/write once positioned. Proportional to <span style="color:var(--amber)">data size</span>. Usually smallest component.</div>
+            <div class="mb-1 tracking-widest" style="color:var(--cyan)">③ DATA TRANSFER</div>
+            <div>Time to read/write once positioned. Proportional to <span style="color:var(--cyan)">data size</span>. Usually smallest component.</div>
           </div>
-          <div class="p-2 mt-2" style="border:1px solid var(--border)">
-            <div style="color:var(--amber-dim)" class="mb-1">TOTAL ACCESS TIME =</div>
-            <div style="color:var(--amber)">Seek + Rotational Latency + Transfer</div>
+          <div class="p-2 mt-2" style="border:1px solid var(--border);background:#040c16">
+            <div style="color:var(--cyan-dim)" class="mb-1">TOTAL ACCESS TIME =</div>
+            <div style="color:var(--cyan)">Seek + Rotational Latency + Transfer</div>
           </div>
           <div class="mt-3">
-            <div class="mb-1 tracking-widest" style="color:var(--amber)">④ REAL-WORLD ANALOGY</div>
-            <div>Disk scheduling is like an <span style="color:var(--amber)">elevator</span> deciding which floors to stop at. FCFS = stop in the order buttons were pressed. SSTF = stop at closest floor first. SCAN = sweep up, then down — just like a real elevator.</div>
+            <div class="mb-1 tracking-widest" style="color:var(--cyan)">④ REAL-WORLD ANALOGY</div>
+            <div>Disk scheduling is like an <span style="color:var(--cyan)">elevator</span> deciding which floors to stop at. FCFS = stop in the order buttons were pressed. SSTF = stop at closest floor first. SCAN = sweep up, then down — just like a real elevator.</div>
           </div>
           <div class="mt-3">
-            <div class="mb-1 tracking-widest" style="color:var(--amber)">⑤ OS USAGE</div>
-            <div>Linux uses <span style="color:var(--amber)">CFQ / BFQ</span> (fair queuing). Windows uses a variant of LOOK. SSDs make seek time negligible — scheduling matters less for modern NVMe drives.</div>
+            <div class="mb-1 tracking-widest" style="color:var(--cyan)">⑤ OS USAGE</div>
+            <div>Linux uses <span style="color:var(--cyan)">CFQ / BFQ</span> (fair queuing). Windows uses a variant of LOOK. SSDs make seek time negligible — scheduling matters less for modern NVMe drives.</div>
           </div>
         </div>
 
@@ -463,33 +590,36 @@
         </div>
 
         <!-- When to use tab -->
-        <div id="tab-when" class="tab-content text-xs leading-relaxed" style="color:#887733">
-          <div class="mb-3 p-2" style="border:1px solid var(--border)">
-            <div style="color:var(--amber)" class="mb-1 tracking-widest">FCFS</div>
+        <div id="tab-when" class="tab-content text-xs leading-relaxed" style="color:#2a5a70">
+          <div class="mb-3 p-2" style="border:1px solid var(--border);background:#040c16">
+            <div style="color:var(--cyan)" class="mb-1 tracking-widest">FCFS</div>
             <div>Use when fairness is critical and throughput is secondary. Good for small queues or debugging.</div>
             <div class="mt-1" style="color:var(--red)">Avoid: High-load systems needing performance.</div>
           </div>
-          <div class="mb-3 p-2" style="border:1px solid var(--border)">
-            <div style="color:var(--amber)" class="mb-1 tracking-widest">SSTF</div>
+          <div class="mb-3 p-2" style="border:1px solid var(--border);background:#040c16">
+            <div style="color:var(--cyan)" class="mb-1 tracking-widest">SSTF</div>
             <div>Use for maximum throughput in moderate-load systems where some request delay is acceptable.</div>
             <div class="mt-1" style="color:var(--red)">Avoid: Any system where fairness guarantees are needed (edge requests starve).</div>
           </div>
-          <div class="mb-3 p-2" style="border:1px solid var(--border)">
-            <div style="color:var(--amber)" class="mb-1 tracking-widest">SCAN / LOOK</div>
+          <div class="mb-3 p-2" style="border:1px solid var(--border);background:#040c16">
+            <div style="color:var(--cyan)" class="mb-1 tracking-widest">SCAN / LOOK</div>
             <div>Best general-purpose choice. Balanced performance + fairness. LOOK is more efficient (doesn't overshoot disk boundaries).</div>
             <div class="mt-1" style="color:var(--green)">Use for: General-purpose OS disk scheduling.</div>
           </div>
-          <div class="mb-3 p-2" style="border:1px solid var(--border)">
-            <div style="color:var(--amber)" class="mb-1 tracking-widest">C-SCAN / C-LOOK</div>
+          <div class="mb-3 p-2" style="border:1px solid var(--border);background:#040c16">
+            <div style="color:var(--cyan)" class="mb-1 tracking-widest">C-SCAN / C-LOOK</div>
             <div>Best for high-load servers. Uniform wait time across all cylinders. C-LOOK optimizes by not sweeping to disk boundaries.</div>
             <div class="mt-1" style="color:var(--green)">Use for: Database servers, high-throughput I/O systems.</div>
           </div>
         </div>
 
+        <!-- Glossary tab -->
+        <div id="tab-glossary" class="tab-content text-xs leading-relaxed" style="color:#2a5a70">
+          <div id="glossaryContent"></div>
+        </div>
+
       </div>
     </div>
-
-  </div><!-- /right col -->
 </div><!-- /main grid -->
 
 <script>
@@ -649,7 +779,7 @@ function buildAlgoButtons() {
   ALGORITHMS.forEach((a, idx) => {
     const btn = document.createElement('button');
     btn.className = 'btn text-left ' + (state.algo === a ? 'active' : '');
-    btn.innerHTML = '<span style="color:var(--amber-dim);font-size:9px">[' + (idx+1) + ']</span> ' + a + ' <span style="font-size:9px;opacity:0.5">— ' + getAlgoShortDesc(a) + '</span>';
+    btn.innerHTML = '<span style="color:var(--cyan-dim);font-size:9px">[' + (idx+1) + ']</span> ' + a + ' <span style="font-size:9px;opacity:0.5">— ' + getAlgoShortDesc(a) + '</span>';
     btn.onclick = () => selectAlgo(a);
     btn.id = 'algobtn_' + a;
     btn.title = ALGO_INFO[a].rule;
@@ -893,14 +1023,14 @@ function updateDecisionPanel() {
     row.innerHTML = '<span class="' + (d.chosen ? 'dist-chosen-label' : 'dist-rejected-label') + '" style="width:28px;text-align:right">'
       + (d.chosen ? '►' : '·') + d.cyl + '</span>'
       + '<div class="dist-bar-outer"><div class="dist-bar-inner" style="width:' + pct + '%"></div></div>'
-      + '<span style="width:24px;text-align:right;' + (d.chosen ? 'color:var(--green)' : 'color:var(--amber-dim)') + '">' + d.dist + '</span>';
+      + '<span style="width:24px;text-align:right;' + (d.chosen ? 'color:var(--green)' : 'color:var(--cyan-dim)') + '">' + d.dist + '</span>';
     distEl.appendChild(row);
   });
   if (info.isJump) {
     distEl.innerHTML = '<div style="color:var(--red);font-size:10px">↩ JUMP — no service<br>Head returns to cyl 0</div>';
   }
   if (info.isEdge) {
-    distEl.innerHTML = '<div style="color:var(--amber);font-size:10px">⊠ BOUNDARY<br>Direction reversal</div>';
+    distEl.innerHTML = '<div style="color:var(--cyan);font-size:10px">⊠ BOUNDARY<br>Direction reversal</div>';
   }
 
   // Animate re-render
@@ -972,7 +1102,7 @@ function updateQueueChips() {
     } else if (isServiced) {
       chip.style.cssText = 'border-color:#1b5e20;color:#00e676;background:#051a08';
     } else {
-      chip.style.cssText = 'border-color:var(--amber-dim);color:var(--amber)';
+      chip.style.cssText = 'border-color:var(--cyan-dim);color:var(--cyan)';
     }
     chip.textContent = r;
     chips.appendChild(chip);
@@ -1000,7 +1130,7 @@ function initSim() {
   drawChart(state.headStart);
   drawDisk(state.headStart);
   setStatus('READY');
-  updateDecisionPanel();
+  updateNarrator();
 }
 
 function resetSim() {
@@ -1041,7 +1171,8 @@ function stepOnce(fromPlayLoop) {
   updateQueueChips();
   updateStepCounter();
   checkStarvation();
-  updateDecisionPanel();
+  updateNarrator();
+  spawnFloatMath(prev, cur, dist);
 
   const progress = (state.step / (state.sequence.length - 1)) * 100;
   document.getElementById('progressBar').style.width = progress + '%';
@@ -1138,7 +1269,7 @@ function updateStats() {
     document.getElementById('effNeedle').style.left = needle + '%';
     const saving = Math.round((1 - myTotal / fcfsTotal) * 100);
     document.getElementById('effLabel').textContent = (saving >= 0 ? '-' + saving : '+' + Math.abs(saving)) + '% vs FCFS';
-    document.getElementById('effLabel').style.color = saving >= 10 ? 'var(--green)' : saving >= 0 ? 'var(--amber)' : 'var(--red)';
+    document.getElementById('effLabel').style.color = saving >= 10 ? 'var(--green)' : saving >= 0 ? 'var(--cyan)' : 'var(--red)';
   }
 }
 
@@ -1157,7 +1288,7 @@ function checkStarvation() {
   const farthestDist = Math.max(...notServiced.map(r => Math.abs(r - currentHead)));
   const fairnessPct = Math.max(0, 100 - (farthestDist / DISK_MAX * 100));
   document.getElementById('fairnessBar').style.width = fairnessPct + '%';
-  document.getElementById('fairnessBar').style.background = fairnessPct > 60 ? 'var(--green)' : fairnessPct > 30 ? 'var(--amber)' : 'var(--red)';
+  document.getElementById('fairnessBar').style.background = fairnessPct > 60 ? 'var(--green)' : fairnessPct > 30 ? 'var(--cyan)' : 'var(--red)';
 
   if (state.algo === 'SSTF' && state.step >= 3) {
     const farthest = notServiced.reduce((a, b) => Math.abs(b - currentHead) > Math.abs(a - currentHead) ? b : a, notServiced[0]);
@@ -1168,7 +1299,7 @@ function checkStarvation() {
     }
   }
 
-  panel.innerHTML = '<div style="color:var(--amber-dim)">● ' + notServiced.length + ' PENDING: [' + notServiced.slice(0, 5).join(',') + (notServiced.length > 5 ? '...' : '') + ']</div>';
+  panel.innerHTML = '<div style="color:var(--cyan-dim)">● ' + notServiced.length + ' PENDING: [' + notServiced.slice(0, 5).join(',') + (notServiced.length > 5 ? '...' : '') + ']</div>';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1205,13 +1336,13 @@ function renderCompTable(results) {
     const isCurrent = a === state.algo;
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid var(--border)';
-    if (isCurrent) tr.style.background = 'rgba(255,179,0,0.04)';
-    tr.innerHTML = '<td class="py-1 px-1 text-center" style="color:' + (isBest ? 'var(--green)' : isWorst ? 'var(--red)' : 'var(--amber-dim)') + '">'
+    if (isCurrent) tr.style.background = 'rgba(0,229,255,0.04)';
+    tr.innerHTML = '<td class="py-1 px-1 text-center" style="color:' + (isBest ? 'var(--green)' : isWorst ? 'var(--red)' : 'var(--cyan-dim)') + '">'
       + (isBest ? '★' : isWorst ? '▼' : (rank+1)) + '</td>'
-      + '<td class="py-1 px-1 ' + (isBest ? 'glow-green' : '') + '" style="color:' + (isBest ? 'var(--green)' : isCurrent ? 'var(--amber-glow)' : 'var(--amber-dim)') + '">'
+      + '<td class="py-1 px-1 ' + (isBest ? 'glow-green' : '') + '" style="color:' + (isBest ? 'var(--green)' : isCurrent ? 'var(--cyan-glow)' : 'var(--cyan-dim)') + '">'
       + a + (isCurrent ? ' ◄' : '') + '</td>'
-      + '<td class="py-1 px-1 text-right" style="color:' + (isBest ? 'var(--green)' : isWorst ? 'var(--red)' : 'var(--amber)') + '">' + total + '</td>'
-      + '<td class="py-1 px-1 text-right" style="color:#665522">' + avg + '</td>';
+      + '<td class="py-1 px-1 text-right" style="color:' + (isBest ? 'var(--green)' : isWorst ? 'var(--red)' : 'var(--cyan)') + '">' + total + '</td>'
+      + '<td class="py-1 px-1 text-right" style="color:#1a4a5a">' + avg + '</td>';
     tbody.appendChild(tr);
   });
 }
@@ -1226,21 +1357,25 @@ function drawChart(animHeadPos) {
   const H = canvas.height;
   canvas.width = W;
 
-  ctx.fillStyle = '#050503';
+  // Deep space background with subtle gradient
+  const bgGrad = ctx.createLinearGradient(0,0,0,H);
+  bgGrad.addColorStop(0, '#040c18');
+  bgGrad.addColorStop(1, '#030810');
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
   const PAD_L = 46, PAD_R = 12, PAD_T = 14, PAD_B = 28;
   const chartW = W - PAD_L - PAD_R;
   const chartH = H - PAD_T - PAD_B;
 
-  // Grid lines
+  // Grid lines — cyan tinted
   for (let v = 0; v <= 200; v += 50) {
     const y = PAD_T + chartH - (v / DISK_MAX) * chartH;
-    ctx.fillStyle = 'rgba(255,179,0,0.4)';
+    ctx.fillStyle = 'rgba(0,229,255,0.35)';
     ctx.font = '9px Share Tech Mono';
     ctx.textAlign = 'right';
     ctx.fillText(v, PAD_L - 5, y + 3);
-    ctx.strokeStyle = 'rgba(255,179,0,0.06)';
+    ctx.strokeStyle = 'rgba(0,229,255,0.05)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(W - PAD_R, y); ctx.stroke();
   }
@@ -1249,12 +1384,12 @@ function drawChart(animHeadPos) {
   if (seq.length < 2) {
     state.requests.forEach(r => {
       const y = PAD_T + chartH - (r / DISK_MAX) * chartH;
-      ctx.fillStyle = 'rgba(255,179,0,0.2)';
+      ctx.fillStyle = 'rgba(0,229,255,0.18)';
       for (let x = PAD_L; x < W - PAD_R; x += 24) {
         ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2); ctx.fill();
       }
     });
-    ctx.fillStyle = 'rgba(255,179,0,0.3)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,229,255,0.3)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'center';
     ctx.fillText('STEP →', PAD_L + chartW / 2, H - 4);
     return;
   }
@@ -1264,7 +1399,7 @@ function drawChart(animHeadPos) {
   const isCscan = state.algo === 'C-SCAN';
 
   // Full path (faded dashed preview)
-  ctx.strokeStyle = 'rgba(255,179,0,0.08)';
+  ctx.strokeStyle = 'rgba(0,229,255,0.06)';
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 5]);
   ctx.beginPath();
@@ -1280,7 +1415,7 @@ function drawChart(animHeadPos) {
   if (state.step > 0) {
     const grad = ctx.createLinearGradient(PAD_L, 0, PAD_L + state.step * xStep, 0);
     grad.addColorStop(0, 'rgba(0,230,118,0.7)');
-    grad.addColorStop(1, 'rgba(255,179,0,0.9)');
+    grad.addColorStop(1, 'rgba(0,229,255,0.95)');
     ctx.strokeStyle = grad;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1361,7 +1496,7 @@ function drawChart(animHeadPos) {
     } else if (isServiced && isReq) {
       ctx.fillStyle = '#00e676'; ctx.fill();
     } else {
-      ctx.fillStyle = 'rgba(255,179,0,0.25)'; ctx.fill();
+      ctx.fillStyle = 'rgba(0,229,255,0.22)'; ctx.fill();
     }
   });
 
@@ -1379,9 +1514,9 @@ function drawChart(animHeadPos) {
     ctx.strokeStyle = 'rgba(255,23,68,0.5)'; ctx.lineWidth = 4; ctx.stroke(); ctx.lineWidth = 1;
   }
 
-  ctx.fillStyle = 'rgba(255,179,0,0.3)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(0,229,255,0.28)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'center';
   ctx.fillText('STEP →', PAD_L + chartW / 2, H - 4);
-  ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,179,0,0.4)';
+  ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(0,229,255,0.35)';
   ctx.fillText('CYL', 2, PAD_T + chartH / 2);
 }
 
@@ -1395,49 +1530,60 @@ function drawDisk(animHeadPos) {
   const H = canvas.height;
   canvas.width = W;
 
-  ctx.fillStyle = '#050503';
+  // Deep space background
+  const bgGrad = ctx.createRadialGradient(W*0.38, H*0.5, 0, W*0.38, H*0.5, Math.min(W,H)*0.8);
+  bgGrad.addColorStop(0, '#060f1a');
+  bgGrad.addColorStop(1, '#030810');
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
   const cx = W * 0.38, cy = H * 0.5;
   const maxR = Math.min(cx, cy) * 0.88;
   const numTracks = 8;
 
-  // Concentric tracks
+  // Concentric tracks — cyan tinted
   for (let i = numTracks; i >= 1; i--) {
     const r = (i / numTracks) * maxR;
-    const alpha = 0.1 + (i / numTracks) * 0.15;
+    const alpha = 0.07 + (i / numTracks) * 0.12;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,179,0,' + alpha + ')';
-    ctx.lineWidth = i === numTracks ? 2 : 1;
+    ctx.strokeStyle = `rgba(0,229,255,${alpha})`;
+    ctx.lineWidth = i === numTracks ? 1.5 : 0.8;
     ctx.stroke();
   }
 
-  // Current cylinder highlight
+  // Current cylinder highlight — red active ring with cyan outer glow
   const headCyl = animHeadPos !== undefined ? animHeadPos : (state.step < state.sequence.length ? state.sequence[state.step] : state.headStart);
   const cylR = (headCyl / DISK_MAX) * maxR;
   if (cylR > 3) {
+    // Outer cyan halo
     ctx.beginPath(); ctx.arc(cx, cy, cylR, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,23,68,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,229,255,0.08)'; ctx.lineWidth = 14; ctx.stroke();
+    // Active ring
     ctx.beginPath(); ctx.arc(cx, cy, cylR, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,23,68,0.15)'; ctx.lineWidth = 8; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,23,68,0.7)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, cylR, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,23,68,0.18)'; ctx.lineWidth = 8; ctx.stroke();
   }
 
-  // Pending request rings (subtle)
+  // Pending request rings (subtle cyan)
   state.requests.forEach(r => {
     if (state.serviced.includes(r)) return;
     const rr = (r / DISK_MAX) * maxR;
     if (rr > 2) {
       ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,179,0,0.12)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,229,255,0.1)'; ctx.lineWidth = 1; ctx.stroke();
     }
   });
 
   // Center hub
   const hubGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 12);
-  hubGrad.addColorStop(0, '#3a3020'); hubGrad.addColorStop(1, '#1a1508');
+  hubGrad.addColorStop(0, '#0a1e30'); hubGrad.addColorStop(1, '#050f18');
   ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI * 2);
   ctx.fillStyle = hubGrad; ctx.fill();
-  ctx.strokeStyle = '#665522'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.strokeStyle = '#0d2540'; ctx.lineWidth = 1.5; ctx.stroke();
+  // Hub inner dot
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,229,255,0.4)'; ctx.fill();
 
   // Sector lines
   for (let s = 0; s < 12; s++) {
@@ -1445,7 +1591,7 @@ function drawDisk(animHeadPos) {
     ctx.beginPath();
     ctx.moveTo(cx + Math.cos(angle) * 14, cy + Math.sin(angle) * 14);
     ctx.lineTo(cx + Math.cos(angle) * maxR, cy + Math.sin(angle) * maxR);
-    ctx.strokeStyle = 'rgba(255,179,0,0.04)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,229,255,0.03)'; ctx.lineWidth = 1; ctx.stroke();
   }
 
   // Actuator arm (animated)
@@ -1474,56 +1620,64 @@ function drawDisk(animHeadPos) {
 
   // Pivot
   ctx.beginPath(); ctx.arc(pivotX, pivotY, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#554420'; ctx.fill();
-  ctx.strokeStyle = 'var(--amber-dim)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#0a1828'; ctx.fill();
+  ctx.strokeStyle = '#0d2a40'; ctx.lineWidth = 1; ctx.stroke();
 
-  // Arm
+  // Arm — metallic cyan-tinted
   const armGrad = ctx.createLinearGradient(pivotX, pivotY, targetX, targetY);
-  armGrad.addColorStop(0, '#3a3020'); armGrad.addColorStop(1, '#887733');
+  armGrad.addColorStop(0, '#0a1828'); armGrad.addColorStop(1, '#1a4060');
   ctx.beginPath(); ctx.moveTo(pivotX, pivotY); ctx.lineTo(targetX, targetY);
   ctx.strokeStyle = armGrad; ctx.lineWidth = 3; ctx.stroke();
 
-  // R/W head
+  // R/W head — bright cyan with glow
   ctx.beginPath(); ctx.arc(targetX, targetY, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#00e676'; ctx.fill();
-  ctx.strokeStyle = 'rgba(0,230,118,0.5)'; ctx.lineWidth = 3; ctx.stroke();
-  ctx.beginPath(); ctx.arc(targetX, targetY, 9, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0,230,118,0.15)'; ctx.lineWidth = 4; ctx.stroke();
+  ctx.fillStyle = '#00e5ff';
+  ctx.shadowColor = 'rgba(0,229,255,0.8)';
+  ctx.shadowBlur = 10;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(0,229,255,0.4)'; ctx.lineWidth = 3; ctx.stroke();
+  // Outer glow ring
+  ctx.beginPath(); ctx.arc(targetX, targetY, 10, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,229,255,0.12)'; ctx.lineWidth = 5; ctx.stroke();
 
-  // Cylinder ruler (right side)
+  // Cylinder ruler (right side) — cyan theme
   const rulerX = W * 0.78;
   const rulerTop = H * 0.08, rulerBot = H * 0.92;
   const rulerH = rulerBot - rulerTop;
-  ctx.strokeStyle = 'rgba(255,179,0,0.2)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(0,229,255,0.2)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(rulerX, rulerTop); ctx.lineTo(rulerX, rulerBot); ctx.stroke();
 
   for (let c = 0; c <= DISK_MAX; c += 25) {
     const y = rulerTop + (c / DISK_MAX) * rulerH;
     ctx.beginPath(); ctx.moveTo(rulerX - 4, y); ctx.lineTo(rulerX + 4, y); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,179,0,0.4)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(0,229,255,0.35)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'right';
     ctx.fillText(c, rulerX - 7, y + 3);
   }
 
-  // Pending dots on ruler
+  // Pending dots on ruler — cyan/green
   state.requests.forEach(r => {
     const y = rulerTop + (r / DISK_MAX) * rulerH;
     ctx.beginPath(); ctx.arc(rulerX, y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = state.serviced.includes(r) ? 'rgba(0,230,118,0.7)' : 'rgba(255,179,0,0.6)';
+    ctx.fillStyle = state.serviced.includes(r) ? 'rgba(0,230,118,0.8)' : 'rgba(0,229,255,0.55)';
     ctx.fill();
   });
 
-  // Head indicator on ruler (animated)
+  // Head indicator on ruler
   const headY = rulerTop + (headCyl / DISK_MAX) * rulerH;
   ctx.fillStyle = '#ff1744';
+  ctx.shadowColor = 'rgba(255,23,68,0.6)'; ctx.shadowBlur = 6;
   ctx.beginPath();
   ctx.moveTo(rulerX + 2, headY);
   ctx.lineTo(rulerX + 14, headY - 5);
   ctx.lineTo(rulerX + 14, headY + 5);
   ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
   ctx.font = 'bold 10px Share Tech Mono'; ctx.textAlign = 'left';
+  ctx.fillStyle = '#ff1744';
   ctx.fillText(Math.round(headCyl), rulerX + 16, headY + 4);
 
-  ctx.fillStyle = 'rgba(255,179,0,0.3)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(0,229,255,0.3)'; ctx.font = '9px Share Tech Mono'; ctx.textAlign = 'center';
   ctx.fillText('CYLINDER', rulerX, rulerTop - 4);
 }
 
@@ -1535,12 +1689,12 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(t => {
     t.classList.remove('active');
     t.style.borderBottom = '';
-    t.style.color = 'var(--amber-dim)';
+    t.style.color = 'var(--cyan-dim)';
   });
   document.getElementById('tab-' + tab).classList.add('active');
   event.target.classList.add('active');
-  event.target.style.color = 'var(--amber)';
-  event.target.style.borderBottom = '2px solid var(--amber)';
+  event.target.style.color = 'var(--cyan)';
+  event.target.style.borderBottom = '2px solid var(--cyan)';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1565,7 +1719,7 @@ function setStatus(text) {
   const el = document.getElementById('statusText');
   el.textContent = text;
   el.className = text === 'RUNNING' ? 'text-xs tracking-widest glow status-active' : 'text-xs tracking-widest glow';
-  el.style.color = text === 'COMPLETE' ? 'var(--green)' : text === 'RUNNING' ? 'var(--amber)' : 'var(--amber-dim)';
+  el.style.color = text === 'COMPLETE' ? 'var(--green)' : text === 'RUNNING' ? 'var(--cyan)' : 'var(--cyan-dim)';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1608,14 +1762,250 @@ window.addEventListener('resize', () => {
 });
 
 // ═══════════════════════════════════════════════════════
-// INIT
+// LIVE NARRATOR (replaces decision panel)
+// ═══════════════════════════════════════════════════════
+function updateNarrator() {
+  const info = getDecisionInfo();
+  const ruleEl   = document.getElementById('narratorRule');
+  const bodyEl   = document.getElementById('narratorBody');
+  const labelEl  = document.getElementById('narratorAlgoLabel');
+  const boxEl    = document.getElementById('narratorBox');
+  const distEl   = document.getElementById('decisionDistances');
+  const warnEl   = document.getElementById('narratorStarvWarning');
+  const labelAlgo = document.getElementById('narratorAlgoLabel');
+
+  labelEl.textContent = '[ ' + info.algoLabel + ' ]';
+  ruleEl.textContent  = info.rule;
+  bodyEl.textContent  = info.narration;
+  bodyEl.classList.toggle('has-text', !!info.narration && info.narration.length > 30);
+
+  // Rebuild distance bars
+  distEl.innerHTML = '';
+  const maxDist = Math.max(1, ...info.distances.map(d => d.dist));
+  info.distances.slice(0, 6).forEach(d => {
+    const pct = Math.max(4, (d.dist / maxDist) * 100);
+    const row = document.createElement('div');
+    row.className = 'dist-row ' + (d.chosen ? 'dist-chosen' : 'dist-rejected');
+    row.innerHTML =
+      '<span class="' + (d.chosen ? 'dist-chosen-label' : 'dist-rejected-label') + '" style="width:28px;text-align:right">'
+      + (d.chosen ? '►' : '·') + d.cyl + '</span>'
+      + '<div class="dist-bar-outer"><div class="dist-bar-inner" style="width:' + pct + '%"></div></div>'
+      + '<span style="width:24px;text-align:right;' + (d.chosen ? 'color:var(--green)' : 'color:var(--cyan-dim)') + '">' + d.dist + '</span>';
+    distEl.appendChild(row);
+  });
+  if (info.isJump) {
+    distEl.innerHTML = '<div style="color:var(--red);font-size:10px">↩ JUMP — no service<br>Head returns to cyl 0</div>';
+  }
+  if (info.isEdge) {
+    distEl.innerHTML = '<div style="color:var(--cyan);font-size:10px">⊠ BOUNDARY<br>Direction reversal</div>';
+  }
+
+  // Starvation flash warning badge
+  const isStarving = state.algo === 'SSTF' && state.step >= 3 &&
+    state.requests.filter(r => !state.serviced.includes(r)).some(r =>
+      Math.abs(r - (state.sequence[state.step] || state.headStart)) > 80);
+  if (warnEl) {
+    warnEl.style.display = isStarving ? 'block' : 'none';
+    if (isStarving) {
+      warnEl.style.animation = 'none';
+      warnEl.offsetHeight;
+      warnEl.style.animation = 'starveFlash 0.5s ease-in-out 3';
+    }
+  }
+
+  // Animate narrator box
+  boxEl.style.animation = 'none';
+  boxEl.offsetHeight;
+  boxEl.style.animation = 'narratorIn 0.3s ease-out';
+}
+
+// ═══════════════════════════════════════════════════════
+// FLOATING MATH OVERLAY
+// ═══════════════════════════════════════════════════════
+function spawnFloatMath(from, to, dist) {
+  if (dist === 0) return;
+  const container = document.getElementById('floatMathContainer');
+  if (!container) return;
+
+  const canvas  = document.getElementById('chartCanvas');
+  const seq     = state.sequence;
+  const stepCount = seq.length - 1;
+  if (stepCount < 1) return;
+
+  const PAD_L = 46, PAD_R = 12, PAD_T = 14, PAD_B = 28;
+  const chartW  = canvas.offsetWidth - PAD_L - PAD_R;
+  const chartH  = canvas.offsetHeight - PAD_T - PAD_B;
+  const xStep   = chartW / stepCount;
+
+  // Position: midpoint between prev and current step
+  const midStep = state.step - 0.5;
+  const midCyl  = (from + to) / 2;
+  const x = PAD_L + midStep * xStep;
+  const y = PAD_T + chartH - (midCyl / DISK_MAX) * chartH;
+
+  const label = document.createElement('div');
+  label.className = 'float-math';
+  label.textContent = '|' + from + ' − ' + to + '| = ' + dist;
+  label.style.left = Math.max(10, Math.min(canvas.offsetWidth - 120, x - 30)) + 'px';
+  label.style.top  = Math.max(5, y - 20) + 'px';
+
+  // Color-code by distance severity
+  if (dist > 100) label.style.color = '#ff6d6d';
+  else if (dist > 50) label.style.color = '#ffcc80';
+  else label.style.color = 'var(--cyan-glow)';
+
+  container.appendChild(label);
+  setTimeout(() => label.remove(), 1700);
+}
+
+// ═══════════════════════════════════════════════════════
+// GRAND TOUR MODE
+// ═══════════════════════════════════════════════════════
+const tour = {
+  active: false,
+  queue: [...ALGORITHMS],
+  current: 0,
+  timer: null
+};
+
+function startGrandTour() {
+  if (tour.active) { cancelTour(); return; }
+  if (state.playing) togglePlay();
+
+  tour.active = true;
+  tour.queue  = [...ALGORITHMS];
+  tour.current = 0;
+  document.getElementById('tourBar').style.display = 'flex';
+  document.getElementById('btnTour').classList.add('active');
+  document.getElementById('btnTour').textContent = '⏹ STOP TOUR';
+  log('[ GRAND TOUR ] Starting automated tour of all 6 algorithms...');
+  runTourStep();
+}
+
+function cancelTour() {
+  tour.active = false;
+  if (tour.timer) clearTimeout(tour.timer);
+  if (state.playing) togglePlay();
+  document.getElementById('tourBar').style.display = 'none';
+  document.getElementById('btnTour').classList.remove('active');
+  document.getElementById('btnTour').textContent = '⚡ GRAND TOUR';
+  log('[ GRAND TOUR ] Tour cancelled.');
+}
+
+function runTourStep() {
+  if (!tour.active) return;
+  if (tour.current >= tour.queue.length) {
+    // Tour complete — show comparison finale
+    finishTour();
+    return;
+  }
+
+  const algo = tour.queue[tour.current];
+  selectAlgo(algo);
+
+  const total = tour.queue.length;
+  document.getElementById('tourAlgoLabel').textContent = algo + ' (' + (tour.current + 1) + '/' + total + ')';
+  document.getElementById('tourProgressBar').style.width = ((tour.current / total) * 100) + '%';
+  log('[ GRAND TOUR ] Running: ' + algo + ' (' + (tour.current + 1) + '/' + total + ')');
+
+  // Start playing — use the animation callback to know when done
+  initSim();
+  tourPlayAll();
+}
+
+function tourPlayAll() {
+  if (!tour.active) return;
+  const cont = stepOnce(true);
+  const stepLabel = 'Step ' + state.step + ' / ' + (state.sequence.length - 1);
+  document.getElementById('tourStepLabel').textContent = stepLabel;
+
+  if (!cont) {
+    // This algorithm finished — wait then move to next
+    tour.current++;
+    tour.timer = setTimeout(() => {
+      if (tour.active) runTourStep();
+    }, 1400);
+    return;
+  }
+  // Schedule next step using animation speed
+  const delay = Math.max(state.speed, 80);
+  tour.timer = setTimeout(() => {
+    if (tour.active) {
+      // Wait for head animation to settle, then next step
+      const waitForAnim = anim.active ? anim.duration : 0;
+      setTimeout(tourPlayAll, waitForAnim);
+    }
+  }, delay);
+}
+
+function finishTour() {
+  tour.active = false;
+  document.getElementById('tourBar').style.display = 'none';
+  document.getElementById('btnTour').classList.remove('active');
+  document.getElementById('btnTour').textContent = '⚡ GRAND TOUR';
+  document.getElementById('tourProgressBar').style.width = '100%';
+
+  runAllComparison();
+
+  // Flash comparison table
+  const compPanel = document.querySelector('#compTable').closest('.panel');
+  if (compPanel) {
+    compPanel.style.borderColor = 'var(--cyan)';
+    compPanel.style.boxShadow = '0 0 20px rgba(0,229,255,0.3)';
+    setTimeout(() => {
+      compPanel.style.borderColor = '';
+      compPanel.style.boxShadow = '';
+    }, 3000);
+  }
+
+  const results = state.compResults;
+  const winner  = Object.entries(results).sort((a,b) => a[1]-b[1])[0];
+  log('[ GRAND TOUR ] ✓ Complete! Winner for this workload: ' + winner[0] + ' (' + winner[1] + ' cylinders total)');
+  log('[ GRAND TOUR ] See the Comparison Table for full rankings ↑');
+}
+
+// ═══════════════════════════════════════════════════════
+// GLOSSARY BUILDER
+// ═══════════════════════════════════════════════════════
+const GLOSSARY = [
+  { term: 'Seek Time',          def: 'The time required for the disk read/write head to move from its current position to the target cylinder/track. This is the dominant component of disk access time and the primary target of scheduling algorithms. Typical range: 1–20 ms on HDDs.' },
+  { term: 'Rotational Latency', def: 'The time spent waiting for the disk to rotate so the desired sector is positioned under the read/write head. On average this equals half a full rotation. For a 7200 RPM drive, average latency ≈ 4.17 ms.' },
+  { term: 'Data Transfer Time', def: 'The time to actually transfer data from the rotating disk surface to memory once the head is in position. Depends on rotational speed and data size. Usually the smallest component of disk access time.' },
+  { term: 'Cylinder',           def: 'A set of all tracks that share the same radial distance from the disk center, across all platters. Numbered 0–199 in this simulator. Moving between cylinders requires physical head movement (seek time).' },
+  { term: 'Starvation',         def: 'A fairness problem where certain I/O requests are indefinitely delayed because other requests keep taking priority. Classic in SSTF: if new close requests arrive continuously, a distant request may never be served.' },
+  { term: 'Throughput',         def: 'The number of I/O requests serviced per unit time. Algorithms like SSTF maximize throughput by minimizing individual seek distances, but at the cost of fairness.' },
+  { term: 'FCFS',               def: 'First-Come First-Served. Serves requests in strict arrival order. Guarantees fairness and no starvation, but provides the worst average seek time due to unpredictable head movement.' },
+  { term: 'SSTF',               def: 'Shortest Seek Time First. Greedy algorithm — always picks the closest pending request. Excellent throughput but prone to starvation of distant requests when the queue is heavily loaded near the center.' },
+  { term: 'SCAN (Elevator)',    def: 'The head sweeps from one disk boundary to the other, servicing all requests in its path, then reverses. Like a building elevator. Provides bounded wait times and no starvation, but cylinders near the edges are served less frequently.' },
+  { term: 'C-SCAN',             def: 'Circular SCAN. Moves only in one direction (low to high). Upon reaching the end (cylinder 199), jumps instantly back to cylinder 0 without servicing requests. Provides more uniform wait times than SCAN.' },
+  { term: 'LOOK',               def: 'An optimized SCAN variant. Instead of always sweeping to the disk boundary (0 or 199), the head reverses direction at the last pending request. Eliminates unnecessary travel to disk edges.' },
+  { term: 'C-LOOK',             def: 'Circular LOOK — optimized C-SCAN. After serving the highest pending request, the head jumps directly to the lowest pending request (not to cylinder 0). Combines the efficiency of LOOK with the uniformity of C-SCAN. Generally considered the best overall algorithm.' },
+  { term: 'HDD vs SSD',        def: 'Hard Disk Drives (HDDs) have physical moving heads, making scheduling critical. Solid State Drives (SSDs) have no moving parts — access time is uniform across all sectors, making disk scheduling largely irrelevant for NVMe/SSDs.' },
+  { term: 'Actuator Arm',       def: 'The mechanical arm that positions the read/write head over the correct track. It pivots on a point outside the disk and can move the head from the center to the outer edge. Its movement corresponds to seek time.' },
+];
+
+function buildGlossary() {
+  const container = document.getElementById('glossaryContent');
+  if (!container) return;
+  GLOSSARY.forEach(item => {
+    container.innerHTML +=
+      '<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">'
+      + '<div style="color:var(--cyan);font-size:11px;letter-spacing:1px;margin-bottom:3px">' + item.term + '</div>'
+      + '<div style="color:#2a5a6a;font-size:10px;line-height:1.6">' + item.def + '</div>'
+      + '</div>';
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT (UPDATED)
 // ═══════════════════════════════════════════════════════
 buildAlgoButtons();
 buildAlgoCards();
+buildGlossary();
 initSim();
 runAllComparison();
-log('[ SYSTEM ] v2 ready — ' + state.requests.length + ' requests | Algo: FCFS | Head: 53');
-log('[ TIP ] Use SPACE to play/pause, arrow keys to step, keys 1–6 to switch algorithm');
+log('[ SYSTEM ] Deep Space v3 ready — ' + state.requests.length + ' requests | Algo: FCFS | Head: 53');
+log('[ TIP ] SPACE=play/pause  →=step  R=reset  P=present  1–6=algo  ⚡=Grand Tour');
 
 document.getElementById('queueInput').addEventListener('change', () => { if (validateInput()) { resetSim(); runAllComparison(); } });
 document.getElementById('headPos').addEventListener('change', () => { resetSim(); runAllComparison(); });
